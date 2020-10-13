@@ -30,7 +30,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Exporter implements an OpenTelemetry trace exporter that exports all spans to AWS Kinesis
+// Exporter implements an OpenTelemetry exporter that exports all traces/metrics to AWS Kinesis
 type Exporter struct {
 	producer   *producer.Producer
 	logger     *zap.Logger
@@ -86,17 +86,32 @@ func (e Exporter) Shutdown(context.Context) error {
 	return nil
 }
 
-// ConsumeTraceData receives a span batch and exports it to AWS Kinesis
-func (e Exporter) ConsumeTraces(_ context.Context, td pdata.Traces) error {
+// ConsumeTraces receives a span batch and exports it to AWS Kinesis
+func (e Exporter) ConsumeTraces(_ context.Context, td pdata.Traces) (int, error) {
 	pBatches, err := e.marshaller.MarshalTraces(td)
 	if err != nil {
 		e.logger.Error("error translating span batch", zap.Error(err))
-		return consumererror.Permanent(err)
+		return td.SpanCount(), consumererror.Permanent(err)
 	}
 	err = e.producer.Put(pBatches, uuid.New().String())
 	if err != nil {
 		e.logger.Error("error exporting span to kinesis", zap.Error(err))
-		return err
+		return td.SpanCount(), err
 	}
-	return nil
+	return 0, nil
+}
+
+// ConsumeMetrics receives a metrics batch and exports it to AWS Kinesis
+func (e Exporter) ConsumeMetrics(_ context.Context, td pdata.Metrics) (int, error) {
+	pBatches, err := e.marshaller.MarshalMetrics(td)
+	if err != nil {
+		e.logger.Error("error translating metrics batch", zap.Error(err))
+		return td.MetricCount(), consumererror.Permanent(err)
+	}
+	err = e.producer.Put(pBatches, uuid.New().String())
+	if err != nil {
+		e.logger.Error("error exporting metrics to kinesis", zap.Error(err))
+		return td.MetricCount(), err
+	}
+	return 0, nil
 }

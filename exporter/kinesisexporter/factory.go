@@ -34,7 +34,8 @@ func NewFactory() component.ExporterFactory {
 	return exporterhelper.NewFactory(
 		typeStr,
 		createDefaultConfig,
-		exporterhelper.WithTraces(createTraceExporter))
+		exporterhelper.WithTraces(createTraceExporter),
+		exporterhelper.WithMetrics(createMetricsExporter))
 }
 
 func createDefaultConfig() configmodels.Exporter {
@@ -63,5 +64,30 @@ func createTraceExporter(
 	config configmodels.Exporter,
 ) (component.TraceExporter, error) {
 	c := config.(*Config)
-	return newKinesisExporter(c, params.Logger)
+	exp, err := newKinesisExporter(c, params.Logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return exporterhelper.NewTraceExporter(
+		c,
+		exp.ConsumeTraces,
+		exporterhelper.WithShutdown(exp.Shutdown))
+}
+
+func createMetricsExporter(
+	_ context.Context,
+	params component.ExporterCreateParams,
+	config configmodels.Exporter,
+) (component.MetricsExporter, error) {
+	c := config.(*Config)
+	exp, err := newKinesisExporter(c, params.Logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return exporterhelper.NewMetricsExporter(
+		c,
+		exp.ConsumeMetrics,
+		exporterhelper.WithShutdown(exp.Shutdown))
 }
