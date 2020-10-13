@@ -33,7 +33,7 @@ func TestOTLPMetricsMarshaller(t *testing.T) {
 	require.NotNil(t, expected)
 
 	m := otlpProtoMarshaller{}
-	assert.Equal(t, otlp_proto, m.Encoding())
+	assert.Equal(t, otlpProto, m.Encoding())
 	message, err := m.MarshalMetrics(td)
 	require.NoError(t, err)
 	assert.Equal(t, expected, message)

@@ -24,7 +24,7 @@ type otlpProtoMarshaller struct {
 var _ Marshaller = (*otlpProtoMarshaller)(nil)
 
 func (m *otlpProtoMarshaller) Encoding() string {
-	return otlp_proto
+	return otlpProto
 }
 
 func (m *otlpProtoMarshaller) MarshalMetrics(metrics pdata.Metrics) ([]byte, error) {

@@ -27,7 +27,7 @@ const (
 	// The value of "type" key in configuration.
 	typeStr         = "kinesis"
 	defaultEncoding = "jaeger-proto"
-	otlp_proto      = "otlp_proto"
+	otlpProto       = "otlp_proto"
 )
 
 // NewFactory creates a factory for Kinesis exporter.
