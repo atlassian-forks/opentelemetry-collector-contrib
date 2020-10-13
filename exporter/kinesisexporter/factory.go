@@ -25,8 +25,8 @@ import (
 
 const (
 	// The value of "type" key in configuration.
-	typeStr      = "kinesis"
-	exportFormat = "jaeger-proto"
+	typeStr         = "kinesis"
+	defaultEncoding = "otlp_proto"
 )
 
 // NewFactory creates a factory for Kinesis exporter.
@@ -90,7 +90,7 @@ func createTraceExporter(
 		MaxAllowedSizePerSpan: c.MaxBytesPerSpan,
 		MaxListSize:           c.MaxBytesPerBatch,
 		ListFlushInterval:     c.FlushIntervalSeconds,
-		Encoding:              exportFormat,
+		Encoding:              defaultEncoding,
 	}, params.Logger)
 	if err != nil {
 		return nil, err
