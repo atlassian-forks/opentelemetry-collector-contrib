@@ -36,6 +36,6 @@ type Message struct {
 func defaultMarshallers() map[string]Marshaller {
 	otlp := &otlpProtoMarshaller{}
 	return map[string]Marshaller{
-		otlp.Encoding():        otlp,
+		otlp.Encoding(): otlp,
 	}
 }
