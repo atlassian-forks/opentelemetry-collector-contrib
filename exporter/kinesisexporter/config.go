@@ -47,5 +47,5 @@ type Config struct {
 	AWS AWSConfig `mapstructure:"aws"`
 	KPL KPLConfig `mapstructure:"kpl"`
 
-	ExportFormat string `mapstructure:"export_format"`
+	Encoding string `mapstructure:"encoding"`
 }

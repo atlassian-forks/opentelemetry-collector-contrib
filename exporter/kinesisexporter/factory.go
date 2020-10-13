@@ -24,9 +24,9 @@ import (
 
 const (
 	// The value of "type" key in configuration.
-	typeStr      = "kinesis"
-	exportFormat = "jaeger-proto"
-	otlpProto    = "otlp_proto"
+	typeStr         = "kinesis"
+	otlpProto       = "otlp_proto"
+	defaultEncoding = otlpProto
 )
 
 // NewFactory creates a factory for Kinesis exporter.
@@ -53,7 +53,7 @@ func createDefaultConfig() configmodels.Exporter {
 			FlushIntervalSeconds: 5,
 			MaxConnections:       24,
 		},
-		ExportFormat: "",
+		Encoding: defaultEncoding,
 	}
 }
 

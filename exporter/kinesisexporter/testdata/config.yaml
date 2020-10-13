@@ -3,7 +3,7 @@ receivers:
 
 exporters:
   kinesis:
-    export_format: ""
+    encoding: ""
     aws:
         stream_name: test-stream
         region: mars-1

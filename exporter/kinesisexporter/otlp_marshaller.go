@@ -27,6 +27,10 @@ func (m *otlpProtoMarshaller) Encoding() string {
 	return otlpProto
 }
 
+func (m *otlpProtoMarshaller) MarshalTraces(traces pdata.Traces) ([]byte, error) {
+	return traces.ToOtlpProtoBytes()
+}
+
 func (m *otlpProtoMarshaller) MarshalMetrics(metrics pdata.Metrics) ([]byte, error) {
 	return metrics.ToOtlpProtoBytes()
 }

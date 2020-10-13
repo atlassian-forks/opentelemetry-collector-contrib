@@ -20,7 +20,10 @@ import (
 
 // Marshaller marshals traces/metrics into Message array.
 type Marshaller interface {
-	// MarshalMetrics serializes metrics into Messages
+	// MarshalTraces serializes traces into a byte array
+	MarshalTraces(traces pdata.Traces) ([]byte, error)
+
+	// MarshalMetrics serializes metrics into a byte array
 	MarshalMetrics(metrics pdata.Metrics) ([]byte, error)
 
 	// Encoding returns encoding name
