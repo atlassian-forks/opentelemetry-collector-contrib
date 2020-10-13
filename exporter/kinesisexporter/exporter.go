@@ -16,8 +16,12 @@ package kinesisexporter
 
 import (
 	"context"
+	"time"
 
-	kinesis "github.com/signalfx/omnition-kinesis-producer"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/kinesis"
+	producer "github.com/signalfx/omnition-kinesis-producer"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/pdata"
@@ -27,24 +31,50 @@ import (
 
 // Exporter implements an OpenTelemetry trace exporter that exports all spans to AWS Kinesis
 type Exporter struct {
-	kinesis *kinesis.Producer
-	logger  *zap.Logger
+	producer *producer.Producer
+	logger   *zap.Logger
 }
 
-var _ component.TraceExporter = (*Exporter)(nil)
+// newKinesisExporter creates a new Exporter with the passed in configurations.
+// It starts the AWS session and setups the relevant connections.
+func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
+	awsConfig := aws.NewConfig().WithRegion(c.AWS.Region).WithEndpoint(c.AWS.KinesisEndpoint)
+	sess, err := session.NewSession(awsConfig)
+	if err != nil {
+		return nil, err
+	}
+	client := kinesis.New(sess)
+
+	pr := producer.New(&producer.Config{
+		Client:     client,
+		StreamName: c.AWS.StreamName,
+		// KPL parameters
+		FlushInterval:       time.Duration(c.KPL.FlushIntervalSeconds) * time.Second,
+		BatchCount:          c.KPL.BatchCount,
+		BatchSize:           c.KPL.BatchSize,
+		AggregateBatchCount: c.KPL.AggregateBatchCount,
+		AggregateBatchSize:  c.KPL.AggregateBatchSize,
+		BacklogCount:        c.KPL.BacklogCount,
+		MaxConnections:      c.KPL.MaxConnections,
+		MaxRetries:          c.KPL.MaxRetries,
+		MaxBackoffTime:      time.Duration(c.KPL.MaxBackoffSeconds) * time.Second,
+	}, nil)
+
+	return &Exporter{producer: pr, logger: logger}, nil
+}
 
 // Start tells the exporter to start. The exporter may prepare for exporting
 // by connecting to the endpoint. Host parameter can be used for communicating
 // with the host after Start() has already returned. If error is returned by
 // Start() then the collector startup will be aborted.
 func (e Exporter) Start(_ context.Context, _ component.Host) error {
-	e.kinesis.Start()
+	e.producer.Start()
 	return nil
 }
 
 // Shutdown is invoked during exporter shutdown.
 func (e Exporter) Shutdown(context.Context) error {
-	e.kinesis.Stop()
+	e.producer.Stop()
 	return nil
 }
 
@@ -62,12 +92,12 @@ func (e Exporter) ConsumeTraces(_ context.Context, td pdata.Traces) error {
 			if span.Process == nil {
 				span.Process = pBatch.Process
 			}
-			// Temporary span marshalling
+			// Temporary span marshaling
 			d, err := span.Marshal()
 			if err != nil {
-				e.logger.Error("error marshalling span", zap.Error(err))
+				e.logger.Error("error marshaling span", zap.Error(err))
 			}
-			err = e.kinesis.Put(d, span.SpanID.String())
+			err = e.producer.Put(d, span.SpanID.String())
 			if err != nil {
 				e.logger.Error("error exporting span to kinesis", zap.Error(err))
 				exportErr = err
