@@ -16,12 +16,7 @@ package kinesisexporter
 
 import (
 	"context"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kinesis"
-	producer "github.com/signalfx/omnition-kinesis-producer"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
@@ -67,25 +62,5 @@ func createTraceExporter(
 	config configmodels.Exporter,
 ) (component.TraceExporter, error) {
 	c := config.(*Config)
-	awsConfig := aws.NewConfig().WithRegion(c.AWS.Region).WithEndpoint(c.AWS.KinesisEndpoint)
-	client := kinesis.New(session.Must(session.NewSession(awsConfig)))
-
-	producer := producer.New(&producer.Config{
-		StreamName: c.AWS.StreamName,
-		// KPL parameters
-		FlushInterval:       time.Duration(c.KPL.FlushIntervalSeconds) * time.Second,
-		BatchCount:          c.KPL.BatchCount,
-		BatchSize:           c.KPL.BatchSize,
-		AggregateBatchCount: c.KPL.AggregateBatchCount,
-		AggregateBatchSize:  c.KPL.AggregateBatchSize,
-		BacklogCount:        c.KPL.BacklogCount,
-		MaxConnections:      c.KPL.MaxConnections,
-		MaxRetries:          c.KPL.MaxRetries,
-		MaxBackoffTime:      time.Duration(c.KPL.MaxBackoffSeconds) * time.Second,
-
-		Logger: nil,
-		Client: client,
-	}, nil)
-
-	return Exporter{producer, params.Logger}, nil
+	return newKinesisExporter(c, params.Logger)
 }
