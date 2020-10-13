@@ -26,7 +26,7 @@ import (
 const (
 	// The value of "type" key in configuration.
 	typeStr         = "kinesis"
-	defaultEncoding = "jaeger-proto"
+	exportFormat = "jaeger-proto"
 	otlpProto       = "otlp_proto"
 )
 
@@ -91,7 +91,7 @@ func createTraceExporter(
 		MaxAllowedSizePerSpan: c.MaxBytesPerSpan,
 		MaxListSize:           c.MaxBytesPerBatch,
 		ListFlushInterval:     c.FlushIntervalSeconds,
-		Encoding:              defaultEncoding,
+		Encoding:              exportFormat,
 	}, params.Logger)
 	if err != nil {
 		return nil, err
