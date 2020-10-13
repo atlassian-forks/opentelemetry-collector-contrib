@@ -24,13 +24,9 @@ type otlpProtoMarshaller struct {
 var _ Marshaller = (*otlpProtoMarshaller)(nil)
 
 func (m *otlpProtoMarshaller) Encoding() string {
-	return defaultEncoding
+	return otlp_proto
 }
 
-func (m *otlpProtoMarshaller) MarshalMetrics(metrics pdata.Metrics) (Message, error) {
-	bts, err := metrics.ToOtlpProtoBytes()
-	if err != nil {
-		return Message{}, err
-	}
-	return Message{Value: bts}, nil
+func (m *otlpProtoMarshaller) MarshalMetrics(metrics pdata.Metrics) ([]byte, error) {
+	return metrics.ToOtlpProtoBytes()
 }
