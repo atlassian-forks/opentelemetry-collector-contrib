@@ -27,11 +27,6 @@ type Marshaller interface {
 	Encoding() string
 }
 
-// Message encapsulates Kinesis' message payload.
-type Message struct {
-	Value []byte
-}
-
 // defaultMarshallers returns map of supported encodings with Marshaller.
 func defaultMarshallers() map[string]Marshaller {
 	otlp := &otlpProtoMarshaller{}
