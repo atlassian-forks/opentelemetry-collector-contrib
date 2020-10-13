@@ -24,8 +24,9 @@ import (
 
 const (
 	// The value of "type" key in configuration.
-	typeStr         = "kinesis"
-	otlpProto       = "otlp_proto"
+	typeStr   = "kinesis"
+	otlpProto = "otlp_proto"
+	// The default encoding scheme is set to otlpProto
 	defaultEncoding = otlpProto
 )
 
@@ -44,7 +45,8 @@ func createDefaultConfig() configmodels.Exporter {
 			NameVal: typeStr,
 		},
 		AWS: AWSConfig{
-			Region: "us-west-2",
+			Region:     "us-west-2",
+			StreamName: "test-stream",
 		},
 		KPL: KPLConfig{
 			BatchSize:            5242880,
