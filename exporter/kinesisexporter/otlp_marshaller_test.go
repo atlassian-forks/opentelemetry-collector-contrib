@@ -19,7 +19,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
@@ -38,3 +37,5 @@ func TestOTLPMetricsMarshaller(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, expected, message)
 }
+
+// TODO add test for trace marshaling

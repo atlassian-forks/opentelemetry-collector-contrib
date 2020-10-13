@@ -16,28 +16,36 @@ package kinesisexporter
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/google/uuid"
 	producer "github.com/signalfx/omnition-kinesis-producer"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/pdata"
-	jaegertranslator "go.opentelemetry.io/collector/translator/trace/jaeger"
 	"go.uber.org/zap"
 )
 
 // Exporter implements an OpenTelemetry trace exporter that exports all spans to AWS Kinesis
 type Exporter struct {
-	producer *producer.Producer
-	logger   *zap.Logger
+	producer   *producer.Producer
+	logger     *zap.Logger
+	marshaller Marshaller
 }
 
 // newKinesisExporter creates a new Exporter with the passed in configurations.
 // It starts the AWS session and setups the relevant connections.
 func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
+	// Get marshaller based on config
+	marshaller := defaultMarshallers()[c.Encoding]
+	if marshaller == nil {
+		return nil, fmt.Errorf("unrecognized encoding")
+	}
+
 	awsConfig := aws.NewConfig().WithRegion(c.AWS.Region).WithEndpoint(c.AWS.KinesisEndpoint)
 	sess, err := session.NewSession(awsConfig)
 	if err != nil {
@@ -60,7 +68,7 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 		MaxBackoffTime:      time.Duration(c.KPL.MaxBackoffSeconds) * time.Second,
 	}, nil)
 
-	return &Exporter{producer: pr, logger: logger}, nil
+	return &Exporter{producer: pr, marshaller: marshaller, logger: logger}, nil
 }
 
 // Start tells the exporter to start. The exporter may prepare for exporting
@@ -80,29 +88,15 @@ func (e Exporter) Shutdown(context.Context) error {
 
 // ConsumeTraceData receives a span batch and exports it to AWS Kinesis
 func (e Exporter) ConsumeTraces(_ context.Context, td pdata.Traces) error {
-	pBatches, err := jaegertranslator.InternalTracesToJaegerProto(td)
+	pBatches, err := e.marshaller.MarshalTraces(td)
 	if err != nil {
 		e.logger.Error("error translating span batch", zap.Error(err))
 		return consumererror.Permanent(err)
 	}
-	// TODO: Use a multi error type
-	var exportErr error
-	for _, pBatch := range pBatches {
-		for _, span := range pBatch.GetSpans() {
-			if span.Process == nil {
-				span.Process = pBatch.Process
-			}
-			// Temporary span marshaling
-			d, err := span.Marshal()
-			if err != nil {
-				e.logger.Error("error marshaling span", zap.Error(err))
-			}
-			err = e.producer.Put(d, span.SpanID.String())
-			if err != nil {
-				e.logger.Error("error exporting span to kinesis", zap.Error(err))
-				exportErr = err
-			}
-		}
+	err = e.producer.Put(pBatches, uuid.New().String())
+	if err != nil {
+		e.logger.Error("error exporting span to kinesis", zap.Error(err))
+		return err
 	}
-	return exportErr
+	return nil
 }

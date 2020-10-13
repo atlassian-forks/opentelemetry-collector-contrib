@@ -56,6 +56,7 @@ func TestDefaultConfig(t *testing.T) {
 				FlushIntervalSeconds: 5,
 				MaxConnections:       24,
 			},
+			Encoding: defaultEncoding,
 		},
 	)
 }
@@ -97,6 +98,7 @@ func TestConfig(t *testing.T) {
 				MaxRetries:           17,
 				MaxBackoffSeconds:    18,
 			},
+			Encoding: "",
 		},
 	)
 }
