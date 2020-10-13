@@ -22,6 +22,11 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
+func TestCorrectEncoding(t *testing.T) {
+	m := otlpProtoMarshaller{}
+	assert.Equal(t, otlpProto, m.Encoding())
+}
+
 func TestOTLPMetricsMarshaller(t *testing.T) {
 	td := pdata.NewMetrics()
 	td.ResourceMetrics().Resize(1)
@@ -32,10 +37,24 @@ func TestOTLPMetricsMarshaller(t *testing.T) {
 	require.NotNil(t, expected)
 
 	m := otlpProtoMarshaller{}
-	assert.Equal(t, otlpProto, m.Encoding())
-	message, err := m.MarshalMetrics(td)
+	payload, err := m.MarshalMetrics(td)
 	require.NoError(t, err)
-	assert.Equal(t, expected, message)
+	assert.Equal(t, expected, payload)
 }
 
-// TODO add test for trace marshaling
+func TestOTLPTracesMarshaller(t *testing.T) {
+	td := pdata.NewTraces()
+	td.ResourceSpans().Resize(1)
+	span := td.ResourceSpans().At(0).Resource()
+	span.InitEmpty()
+	span.Attributes().InsertString("foo", "bar")
+
+	expected, err := td.ToOtlpProtoBytes()
+	require.NoError(t, err)
+	require.NotNil(t, expected)
+
+	m := otlpProtoMarshaller{}
+	payload, err := m.MarshalTraces(td)
+	require.NoError(t, err)
+	assert.Equal(t, expected, payload)
+}
