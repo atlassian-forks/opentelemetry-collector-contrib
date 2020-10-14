@@ -55,6 +55,7 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 	client := kinesis.New(sess)
 
 	pr := producer.New(&producer.Config{
+		Logger:     &kpzap.Logger{Logger: logger},
 		Client:     client,
 		StreamName: c.AWS.StreamName,
 		// KPL parameters
@@ -67,7 +68,6 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 		MaxConnections:      c.KPL.MaxConnections,
 		MaxRetries:          c.KPL.MaxRetries,
 		MaxBackoffTime:      time.Duration(c.KPL.MaxBackoffSeconds) * time.Second,
-		Logger:              &kpzap.Logger{Logger: logger},
 	}, nil)
 	return &Exporter{producer: pr, marshaller: marshaller, logger: logger}, nil
 }
