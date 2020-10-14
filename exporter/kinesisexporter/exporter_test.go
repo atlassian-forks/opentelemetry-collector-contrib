@@ -15,10 +15,14 @@
 package kinesisexporter
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +30,7 @@ func TestNewKinesisExporter(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, err := newKinesisExporter(cfg, zap.NewNop())
+	exp, err := newExporter(cfg, zap.NewNop())
 	assert.NotNil(t, exp)
 	assert.NoError(t, err)
 }
@@ -36,8 +40,87 @@ func TestNewKinesisExporterBadEncoding(t *testing.T) {
 	require.NotNil(t, cfg)
 	cfg.Encoding = ""
 
-	exp, err := newKinesisExporter(cfg, zap.NewNop())
+	exp, err := newExporter(cfg, zap.NewNop())
 	assert.Nil(t, exp)
 	assert.Error(t, err)
 	assert.Equal(t, err.Error(), "unrecognized encoding")
+}
+
+func TestPushingTracesToKinesisQueue(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	require.NotNil(t, cfg)
+
+	exp, _ := newExporter(cfg, zap.NewNop())
+	mockProducer := new(producerMock)
+	exp.producer = mockProducer
+	require.NotNil(t, exp)
+
+	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(nil)
+
+	dropped, err := exp.pushTraces(context.Background(), pdata.NewTraces())
+	require.NoError(t, err)
+	require.Equal(t, 0, dropped)
+}
+
+func TestErrorPushingTracesToKinesisQueue(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	require.NotNil(t, cfg)
+
+	exp, _ := newExporter(cfg, zap.NewNop())
+	mockProducer := new(producerMock)
+	exp.producer = mockProducer
+	require.NotNil(t, exp)
+
+	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(fmt.Errorf("someerror"))
+
+	_, err := exp.pushTraces(context.Background(), pdata.NewTraces())
+	require.Error(t, err)
+}
+
+func TestPushingMetricsToKinesisQueue(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	require.NotNil(t, cfg)
+
+	exp, _ := newExporter(cfg, zap.NewNop())
+	mockProducer := new(producerMock)
+	exp.producer = mockProducer
+	require.NotNil(t, exp)
+
+	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(nil)
+
+	dropped, err := exp.pushMetrics(context.Background(), pdata.NewMetrics())
+	require.NoError(t, err)
+	require.Equal(t, 0, dropped)
+}
+
+func TestErrorPushingMetricsToKinesisQueue(t *testing.T) {
+	cfg := createDefaultConfig().(*Config)
+	require.NotNil(t, cfg)
+
+	exp, _ := newExporter(cfg, zap.NewNop())
+	mockProducer := new(producerMock)
+	exp.producer = mockProducer
+	require.NotNil(t, exp)
+
+	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(fmt.Errorf("someerror"))
+
+	_, err := exp.pushMetrics(context.Background(), pdata.NewMetrics())
+	require.Error(t, err)
+}
+
+type producerMock struct {
+	mock.Mock
+}
+
+func (m *producerMock) start() {
+	m.Called()
+}
+
+func (m *producerMock) stop() {
+	m.Called()
+}
+
+func (m *producerMock) put(data []byte, partitionKey string) error {
+	args := m.Called(data, partitionKey)
+	return args.Error(0)
 }
