@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kinesis"
 	"github.com/google/uuid"
 	producer "github.com/signalfx/omnition-kinesis-producer"
+	kpzap "github.com/signalfx/omnition-kinesis-producer/loggers/kpzap"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/pdata"
@@ -52,8 +53,7 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 		return nil, err
 	}
 	client := kinesis.New(sess)
-
-	pr := producer.New(&producer.Config{
+	var pr = producer.New(&producer.Config{
 		Client:     client,
 		StreamName: c.AWS.StreamName,
 		// KPL parameters
@@ -66,8 +66,8 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 		MaxConnections:      c.KPL.MaxConnections,
 		MaxRetries:          c.KPL.MaxRetries,
 		MaxBackoffTime:      time.Duration(c.KPL.MaxBackoffSeconds) * time.Second,
+		Logger:              &kpzap.Logger{Logger: logger},
 	}, nil)
-
 	return &Exporter{producer: pr, marshaller: marshaller, logger: logger}, nil
 }
 
@@ -77,7 +77,16 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 // Start() then the collector startup will be aborted.
 func (e Exporter) Start(_ context.Context, _ component.Host) error {
 	e.producer.Start()
+	go e.notifyErrors()
 	return nil
+}
+
+// notifyErrors logs the failures within the kinesis exporter
+func (e Exporter) notifyErrors() {
+	for r := range e.producer.NotifyFailures() {
+		// Logging error for now, these are normally unrecoverable failures
+		e.logger.Error("error putting record on kinesis", zap.Error(r.Err))
+	}
 }
 
 // Shutdown is invoked during exporter shutdown.

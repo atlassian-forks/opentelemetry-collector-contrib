@@ -74,6 +74,7 @@ func createTraceExporter(
 	return exporterhelper.NewTraceExporter(
 		c,
 		exp.ConsumeTraces,
+		exporterhelper.WithStart(exp.Start),
 		exporterhelper.WithShutdown(exp.Shutdown))
 }
 
@@ -91,5 +92,6 @@ func createMetricsExporter(
 	return exporterhelper.NewMetricsExporter(
 		c,
 		exp.ConsumeMetrics,
+		exporterhelper.WithStart(exp.Start),
 		exporterhelper.WithShutdown(exp.Shutdown))
 }
