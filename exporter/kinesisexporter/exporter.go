@@ -53,7 +53,8 @@ func newKinesisExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 		return nil, err
 	}
 	client := kinesis.New(sess)
-	var pr = producer.New(&producer.Config{
+
+	pr := producer.New(&producer.Config{
 		Client:     client,
 		StreamName: c.AWS.StreamName,
 		// KPL parameters
