@@ -38,7 +38,7 @@ func TestCreateTracesExporter(t *testing.T) {
 	assert.NotNil(t, r)
 }
 
-func TestErrorCreateTracesExporter(t *testing.T) {
+func TestErrorCreateTracesExporterByInvalidEncoding(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	cfg.Encoding = ""
 	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{}, cfg)
@@ -53,7 +53,7 @@ func TestCreateMetricsExporter(t *testing.T) {
 	assert.NotNil(t, r)
 }
 
-func TestErrorCreateMetricsExporter(t *testing.T) {
+func TestErrorCreateMetricsExporterByInvalidEncoding(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	cfg.Encoding = ""
 	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{}, cfg)

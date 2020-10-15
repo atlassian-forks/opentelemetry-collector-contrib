@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// producer provides the interface for a kinesis producer. The producer
+// implementation abstracts the interaction with the kinesis producer library
+// used from the exporter
 type producer interface {
 	start()
 	stop()
@@ -37,7 +40,7 @@ func newKinesisProducer(c *Config, logger *zap.Logger) (producer, error) {
 
 	o := omnition.New(&omnition.Config{
 		Logger:     &kpzap.Logger{Logger: logger},
-		Client:     kinesis.New(sess),
+		Client:     kinesis.New(sess, awsConfig),
 		StreamName: c.AWS.StreamName,
 		// KPL parameters
 		FlushInterval:       time.Duration(c.KPL.FlushIntervalSeconds) * time.Second,

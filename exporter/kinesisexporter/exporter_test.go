@@ -26,6 +26,23 @@ import (
 	"go.uber.org/zap"
 )
 
+type producerMock struct {
+	mock.Mock
+}
+
+func (m *producerMock) start() {
+	m.Called()
+}
+
+func (m *producerMock) stop() {
+	m.Called()
+}
+
+func (m *producerMock) put(data []byte, partitionKey string) error {
+	args := m.Called(data, partitionKey)
+	return args.Error(0)
+}
+
 func TestNewKinesisExporter(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
@@ -106,21 +123,4 @@ func TestErrorPushingMetricsToKinesisQueue(t *testing.T) {
 
 	_, err := exp.pushMetrics(context.Background(), pdata.NewMetrics())
 	require.Error(t, err)
-}
-
-type producerMock struct {
-	mock.Mock
-}
-
-func (m *producerMock) start() {
-	m.Called()
-}
-
-func (m *producerMock) stop() {
-	m.Called()
-}
-
-func (m *producerMock) put(data []byte, partitionKey string) error {
-	args := m.Called(data, partitionKey)
-	return args.Error(0)
 }
