@@ -66,16 +66,16 @@ func createTraceExporter(
 	config configmodels.Exporter,
 ) (component.TraceExporter, error) {
 	c := config.(*Config)
-	exp, err := newKinesisExporter(c, params.Logger)
+	exp, err := newExporter(c, params.Logger)
 	if err != nil {
 		return nil, err
 	}
 
 	return exporterhelper.NewTraceExporter(
 		c,
-		exp.ConsumeTraces,
-		exporterhelper.WithStart(exp.Start),
-		exporterhelper.WithShutdown(exp.Shutdown))
+		exp.pushTraces,
+		exporterhelper.WithStart(exp.start),
+		exporterhelper.WithShutdown(exp.shutdown))
 }
 
 func createMetricsExporter(
@@ -84,14 +84,14 @@ func createMetricsExporter(
 	config configmodels.Exporter,
 ) (component.MetricsExporter, error) {
 	c := config.(*Config)
-	exp, err := newKinesisExporter(c, params.Logger)
+	exp, err := newExporter(c, params.Logger)
 	if err != nil {
 		return nil, err
 	}
 
 	return exporterhelper.NewMetricsExporter(
 		c,
-		exp.ConsumeMetrics,
-		exporterhelper.WithStart(exp.Start),
-		exporterhelper.WithShutdown(exp.Shutdown))
+		exp.pushMetrics,
+		exporterhelper.WithStart(exp.start),
+		exporterhelper.WithShutdown(exp.shutdown))
 }

@@ -18,11 +18,10 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-// Marshaller marshals traces/metrics into Message array.
+// Marshaller marshals Opentelemetry data into byte array
 type Marshaller interface {
 	// MarshalTraces serializes traces into a byte array
 	MarshalTraces(traces pdata.Traces) ([]byte, error)
-
 	// MarshalMetrics serializes metrics into a byte array
 	MarshalMetrics(metrics pdata.Metrics) ([]byte, error)
 
