@@ -5,8 +5,8 @@ the same aggregation format that KPLs use. Message payload encoding is configura
 
 The following settings can be optionally configured:
 - `aws` contains AWS specific configuration
-  - `stream_name` (default = test-stream): The Kinesis stream to push events to
-  - `kinesis_endpoint`: The Kinesis endpoint if role is not getting assumed
+  - `stream_name` (default = test-stream): The name of the Kinesis stream where events are sent/pushed
+  - `kinesis_endpoint`: The Kinesis endpoint if role is not being assumed
   - `region` (default = us-west-2): The AWS region where the Kinesis stream is defined
   - `role`: The Kinesis role to assume
 - `kpl` contains kinesis producer library related config to controls things like aggregation, batching, connections, retries, etc
