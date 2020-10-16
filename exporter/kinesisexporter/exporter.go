@@ -41,12 +41,12 @@ func newExporter(c *Config, logger *zap.Logger) (*exporter, error) {
 		return nil, fmt.Errorf("unrecognized encoding")
 	}
 
-	producer, err := newKinesisProducer(c, logger)
+	pr, err := newKinesisProducer(c, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	return &exporter{producer: producer, marshaller: marshaller, logger: logger}, nil
+	return &exporter{producer: pr, marshaller: marshaller, logger: logger}, nil
 }
 
 // start tells the exporter to start. The exporter may prepare for exporting
