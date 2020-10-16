@@ -34,15 +34,15 @@ exporters:
           role: arn:test-role
           kinesis_endpoint: kinesis.mars-1.aws.galactic
       kpl:
-          aggregate_batch_count: 10
-          aggregate_batch_size: 11
-          batch_size: 12
-          batch_count: 13
-          backlog_count: 14
-          flush_interval_seconds: 15
-          max_connections: 16
-          max_retries: 17
-          max_backoff_seconds: 18
+          aggregate_batch_count: 4294967295
+          aggregate_batch_size: 51200
+          batch_size: 5242880
+          batch_count: 1000
+          backlog_count: 2000
+          flush_interval_seconds: 5
+          max_connections: 24
+          max_retries: 10
+          max_backoff_seconds: 60
 ```
 
 [kpl-url]: https://github.com/awslabs/amazon-kinesis-producer
