@@ -16,15 +16,16 @@ package kinesisexporter
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/component"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config/configcheck"
 )
 
 func TestCreateDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	assert.NotNil(t, cfg, "failed to create default config")
 	assert.NoError(t, configcheck.ValidateConfig(cfg))
@@ -32,6 +33,7 @@ func TestCreateDefaultConfig(t *testing.T) {
 }
 
 func TestCreateTracesExporter(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{}, cfg)
 	require.NoError(t, err)
@@ -39,6 +41,7 @@ func TestCreateTracesExporter(t *testing.T) {
 }
 
 func TestErrorCreateTracesExporterByInvalidEncoding(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	cfg.Encoding = ""
 	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{}, cfg)
@@ -47,6 +50,7 @@ func TestErrorCreateTracesExporterByInvalidEncoding(t *testing.T) {
 }
 
 func TestCreateMetricsExporter(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{}, cfg)
 	require.NoError(t, err)
@@ -54,6 +58,7 @@ func TestCreateMetricsExporter(t *testing.T) {
 }
 
 func TestErrorCreateMetricsExporterByInvalidEncoding(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	cfg.Encoding = ""
 	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{}, cfg)

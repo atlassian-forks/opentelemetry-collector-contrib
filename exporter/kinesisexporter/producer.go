@@ -1,6 +1,8 @@
 package kinesisexporter
 
 import (
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -8,7 +10,6 @@ import (
 	omnition "github.com/signalfx/omnition-kinesis-producer"
 	"github.com/signalfx/omnition-kinesis-producer/loggers/kpzap"
 	"go.uber.org/zap"
-	"time"
 )
 
 // producer provides the interface for a kinesis producer. The producer
@@ -26,12 +27,12 @@ type client struct {
 }
 
 func newKinesisProducer(c *Config, logger *zap.Logger) (producer, error) {
-	awsConfig := aws.NewConfig().WithRegion(c.AWS.Region).WithEndpoint(c.AWS.KinesisEndpoint)
-	sess, err := session.NewSession(awsConfig)
+	sess, err := session.NewSession()
 	if err != nil {
 		return nil, err
 	}
 
+	awsConfig := aws.NewConfig().WithRegion(c.AWS.Region).WithEndpoint(c.AWS.KinesisEndpoint)
 	// If AWS role is provided, use sts credentials to assume the role
 	if len(c.AWS.Role) > 0 {
 		creds := stscreds.NewCredentials(sess, c.AWS.Role)
@@ -68,7 +69,8 @@ func (c client) notifyErrors() {
 		// Logging error for now, these are normally unrecoverable failures
 		c.logger.Error("error putting record on kinesis",
 			zap.String("partitionKey", r.PartitionKey),
-			zap.Error(r.Err))
+			zap.Error(r.Err),
+		)
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	factories, err := componenttest.ExampleComponents()
 	assert.Nil(t, err)
 
@@ -63,6 +64,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestConfig(t *testing.T) {
+	t.Parallel()
 	factories, err := componenttest.ExampleComponents()
 	assert.Nil(t, err)
 	factory := NewFactory()
@@ -105,6 +107,7 @@ func TestConfig(t *testing.T) {
 }
 
 func TestConfigCheck(t *testing.T) {
+	t.Parallel()
 	cfg := (NewFactory()).CreateDefaultConfig()
 	assert.NoError(t, configcheck.ValidateConfig(cfg))
 }

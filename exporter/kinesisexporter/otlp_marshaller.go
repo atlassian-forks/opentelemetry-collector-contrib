@@ -18,19 +18,18 @@ import (
 	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-type otlpProtoMarshaller struct {
-}
+type otlpProtoMarshaller struct{}
 
 var _ Marshaller = (*otlpProtoMarshaller)(nil)
 
-func (m *otlpProtoMarshaller) MarshalTraces(traces pdata.Traces) ([]byte, error) {
+func (*otlpProtoMarshaller) MarshalTraces(traces pdata.Traces) ([]byte, error) {
 	return traces.ToOtlpProtoBytes()
 }
 
-func (m *otlpProtoMarshaller) MarshalMetrics(metrics pdata.Metrics) ([]byte, error) {
+func (*otlpProtoMarshaller) MarshalMetrics(metrics pdata.Metrics) ([]byte, error) {
 	return metrics.ToOtlpProtoBytes()
 }
 
-func (m *otlpProtoMarshaller) Encoding() string {
+func (*otlpProtoMarshaller) Encoding() string {
 	return otlpProto
 }

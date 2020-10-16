@@ -19,11 +19,12 @@ import (
 	"fmt"
 	"testing"
 
+	"go.uber.org/zap/zaptest"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/consumer/pdata"
-	"go.uber.org/zap"
 )
 
 type producerMock struct {
@@ -44,30 +45,32 @@ func (m *producerMock) put(data []byte, partitionKey string) error {
 }
 
 func TestNewKinesisExporter(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, err := newExporter(cfg, zap.NewNop())
+	exp, err := newExporter(cfg, zaptest.NewLogger(t))
 	assert.NotNil(t, exp)
 	assert.NoError(t, err)
 }
 
 func TestNewKinesisExporterBadEncoding(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 	cfg.Encoding = ""
 
-	exp, err := newExporter(cfg, zap.NewNop())
+	exp, err := newExporter(cfg, zaptest.NewLogger(t))
 	assert.Nil(t, exp)
-	assert.Error(t, err)
-	assert.Equal(t, err.Error(), "unrecognized encoding")
+	assert.Errorf(t, err, "unrecognized encoding")
 }
 
 func TestPushingTracesToKinesisQueue(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zap.NewNop())
+	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
@@ -80,10 +83,11 @@ func TestPushingTracesToKinesisQueue(t *testing.T) {
 }
 
 func TestErrorPushingTracesToKinesisQueue(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zap.NewNop())
+	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
@@ -95,10 +99,11 @@ func TestErrorPushingTracesToKinesisQueue(t *testing.T) {
 }
 
 func TestPushingMetricsToKinesisQueue(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zap.NewNop())
+	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
@@ -111,10 +116,11 @@ func TestPushingMetricsToKinesisQueue(t *testing.T) {
 }
 
 func TestErrorPushingMetricsToKinesisQueue(t *testing.T) {
+	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zap.NewNop())
+	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)

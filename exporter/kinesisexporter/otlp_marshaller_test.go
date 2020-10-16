@@ -23,11 +23,13 @@ import (
 )
 
 func TestCorrectEncoding(t *testing.T) {
+	t.Parallel()
 	m := otlpProtoMarshaller{}
 	assert.Equal(t, otlpProto, m.Encoding())
 }
 
 func TestOTLPMetricsMarshaller(t *testing.T) {
+	t.Parallel()
 	td := pdata.NewMetrics()
 	td.ResourceMetrics().Resize(1)
 	td.ResourceMetrics().At(0).Resource().InitEmpty()
@@ -43,6 +45,7 @@ func TestOTLPMetricsMarshaller(t *testing.T) {
 }
 
 func TestOTLPTracesMarshaller(t *testing.T) {
+	t.Parallel()
 	td := pdata.NewTraces()
 	td.ResourceSpans().Resize(1)
 	span := td.ResourceSpans().At(0).Resource()

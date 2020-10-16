@@ -31,8 +31,7 @@ type Marshaller interface {
 
 // defaultMarshallers returns map of supported encodings with Marshaller.
 func defaultMarshallers() map[string]Marshaller {
-	otlp := &otlpProtoMarshaller{}
 	return map[string]Marshaller{
-		otlp.Encoding(): otlp,
+		otlpProto: &otlpProtoMarshaller{},
 	}
 }

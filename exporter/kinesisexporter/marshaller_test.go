@@ -22,6 +22,7 @@ import (
 )
 
 func TestDefaultMarshallers(t *testing.T) {
+	t.Parallel()
 	expectedEncodings := []string{
 		"otlp_proto",
 	}
