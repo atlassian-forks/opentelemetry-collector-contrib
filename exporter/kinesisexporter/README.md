@@ -1,6 +1,6 @@
 # Kinesis Exporter
 
-Kinesis exporter exports Opentelemetry data to Kinesis. This exporter uses a [KPL][kpl-url]-like batch producer and uses
+Kinesis exporter exports OpenTelemetry data to Kinesis. This exporter uses a [KPL][kpl-url]-like batch producer and uses
 the same aggregation format that KPLs use. Message payload encoding is configurable.
 
 The following settings can be optionally configured:
