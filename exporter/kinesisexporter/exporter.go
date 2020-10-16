@@ -53,18 +53,18 @@ func newExporter(c *Config, logger *zap.Logger) (*exporter, error) {
 // by connecting to the endpoint. Host parameter can be used for communicating
 // with the host after start() has already returned. If error is returned by
 // start() then the collector startup will be aborted.
-func (e exporter) start(context.Context, component.Host) error {
+func (e *exporter) start(context.Context, component.Host) error {
 	e.producer.start()
 	return nil
 }
 
 // shutdown is invoked during exporter shutdown
-func (e exporter) shutdown(context.Context) error {
+func (e *exporter) shutdown(context.Context) error {
 	e.producer.stop()
 	return nil
 }
 
-func (e exporter) pushTraces(_ context.Context, td pdata.Traces) (int, error) {
+func (e *exporter) pushTraces(_ context.Context, td pdata.Traces) (int, error) {
 	pBatches, err := e.marshaller.MarshalTraces(td)
 	if err != nil {
 		e.logger.Error("error translating span batch", zap.Error(err))
@@ -79,7 +79,7 @@ func (e exporter) pushTraces(_ context.Context, td pdata.Traces) (int, error) {
 	return 0, nil
 }
 
-func (e exporter) pushMetrics(_ context.Context, td pdata.Metrics) (int, error) {
+func (e *exporter) pushMetrics(_ context.Context, td pdata.Metrics) (int, error) {
 	pBatches, err := e.marshaller.MarshalMetrics(td)
 	if err != nil {
 		e.logger.Error("error translating metrics batch", zap.Error(err))
