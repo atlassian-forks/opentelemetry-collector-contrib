@@ -53,13 +53,13 @@ func newExporter(c *Config, logger *zap.Logger) (*exporter, error) {
 // by connecting to the endpoint. Host parameter can be used for communicating
 // with the host after start() has already returned. If error is returned by
 // start() then the collector startup will be aborted.
-func (e *exporter) start(context.Context, component.Host) error {
+func (e *exporter) start(_ context.Context, _ component.Host) error {
 	e.producer.start()
 	return nil
 }
 
 // shutdown is invoked during exporter shutdown
-func (e *exporter) shutdown(context.Context) error {
+func (e *exporter) shutdown(_ context.Context) error {
 	e.producer.stop()
 	return nil
 }
