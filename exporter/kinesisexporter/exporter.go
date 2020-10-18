@@ -16,6 +16,7 @@ package kinesisexporter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -53,18 +54,30 @@ func newExporter(c *Config, logger *zap.Logger) (*exporter, error) {
 // by connecting to the endpoint. Host parameter can be used for communicating
 // with the host after start() has already returned. If error is returned by
 // start() then the collector startup will be aborted.
-func (e *exporter) start(_ context.Context, _ component.Host) error {
+func (e *exporter) start(ctx context.Context, _ component.Host) error {
+	if ctx == nil || ctx.Err() != nil {
+		return errors.New(`invalid context`)
+	}
+
 	e.producer.start()
 	return nil
 }
 
 // shutdown is invoked during exporter shutdown
-func (e *exporter) shutdown(_ context.Context) error {
+func (e *exporter) shutdown(ctx context.Context) error {
+	if ctx == nil || ctx.Err() != nil {
+		return errors.New(`invalid context`)
+	}
+
 	e.producer.stop()
 	return nil
 }
 
-func (e *exporter) pushTraces(_ context.Context, td pdata.Traces) (int, error) {
+func (e *exporter) pushTraces(ctx context.Context, td pdata.Traces) (int, error) {
+	if ctx == nil || ctx.Err() != nil {
+		return 0, errors.New(`invalid context`)
+	}
+
 	pBatches, err := e.marshaller.MarshalTraces(td)
 	if err != nil {
 		e.logger.Error("error translating span batch", zap.Error(err))
@@ -79,7 +92,11 @@ func (e *exporter) pushTraces(_ context.Context, td pdata.Traces) (int, error) {
 	return 0, nil
 }
 
-func (e *exporter) pushMetrics(_ context.Context, td pdata.Metrics) (int, error) {
+func (e *exporter) pushMetrics(ctx context.Context, td pdata.Metrics) (int, error) {
+	if ctx == nil || ctx.Err() != nil {
+		return 0, errors.New(`invalid context`)
+	}
+
 	pBatches, err := e.marshaller.MarshalMetrics(td)
 	if err != nil {
 		e.logger.Error("error translating metrics batch", zap.Error(err))
