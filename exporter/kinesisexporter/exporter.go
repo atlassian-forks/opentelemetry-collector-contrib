@@ -16,7 +16,6 @@ package kinesisexporter
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -24,6 +23,10 @@ import (
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.uber.org/zap"
+)
+
+const (
+	errInvalidContext = "invalid context"
 )
 
 // exporter implements an OpenTelemetry exporter that pushes OpenTelemetry data to AWS Kinesis
@@ -56,7 +59,7 @@ func newExporter(c *Config, logger *zap.Logger) (*exporter, error) {
 // start() then the collector startup will be aborted.
 func (e *exporter) start(ctx context.Context, _ component.Host) error {
 	if ctx == nil || ctx.Err() != nil {
-		return errors.New(`invalid context`)
+		return fmt.Errorf(errInvalidContext)
 	}
 
 	e.producer.start()
@@ -66,7 +69,7 @@ func (e *exporter) start(ctx context.Context, _ component.Host) error {
 // shutdown is invoked during exporter shutdown
 func (e *exporter) shutdown(ctx context.Context) error {
 	if ctx == nil || ctx.Err() != nil {
-		return errors.New(`invalid context`)
+		return fmt.Errorf(errInvalidContext)
 	}
 
 	e.producer.stop()
@@ -75,7 +78,7 @@ func (e *exporter) shutdown(ctx context.Context) error {
 
 func (e *exporter) pushTraces(ctx context.Context, td pdata.Traces) (int, error) {
 	if ctx == nil || ctx.Err() != nil {
-		return 0, errors.New(`invalid context`)
+		return 0, fmt.Errorf(errInvalidContext)
 	}
 
 	pBatches, err := e.marshaller.MarshalTraces(td)
@@ -94,7 +97,7 @@ func (e *exporter) pushTraces(ctx context.Context, td pdata.Traces) (int, error)
 
 func (e *exporter) pushMetrics(ctx context.Context, td pdata.Metrics) (int, error) {
 	if ctx == nil || ctx.Err() != nil {
-		return 0, errors.New(`invalid context`)
+		return 0, fmt.Errorf(errInvalidContext)
 	}
 
 	pBatches, err := e.marshaller.MarshalMetrics(td)
