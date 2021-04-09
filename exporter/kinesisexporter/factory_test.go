@@ -18,6 +18,8 @@ import (
 	"context"
 	"testing"
 
+	"go.uber.org/zap"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
@@ -35,7 +37,7 @@ func TestCreateDefaultConfig(t *testing.T) {
 func TestCreateTracesExporter(t *testing.T) {
 	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
-	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{}, cfg)
+	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{Logger: zap.NewNop()}, cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, r)
 }
@@ -44,7 +46,7 @@ func TestErrorCreateTracesExporterByInvalidEncoding(t *testing.T) {
 	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	cfg.Encoding = ""
-	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{}, cfg)
+	r, err := createTraceExporter(context.Background(), component.ExporterCreateParams{Logger: zap.NewNop()}, cfg)
 	require.Error(t, err)
 	assert.Nil(t, r)
 }
@@ -52,7 +54,7 @@ func TestErrorCreateTracesExporterByInvalidEncoding(t *testing.T) {
 func TestCreateMetricsExporter(t *testing.T) {
 	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
-	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{}, cfg)
+	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{Logger: zap.NewNop()}, cfg)
 	require.NoError(t, err)
 	assert.NotNil(t, r)
 }
@@ -61,7 +63,7 @@ func TestErrorCreateMetricsExporterByInvalidEncoding(t *testing.T) {
 	t.Parallel()
 	cfg := createDefaultConfig().(*Config)
 	cfg.Encoding = ""
-	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{}, cfg)
+	r, err := createMetricsExporter(context.Background(), component.ExporterCreateParams{Logger: zap.NewNop()}, cfg)
 	require.Error(t, err)
 	assert.Nil(t, r)
 }
