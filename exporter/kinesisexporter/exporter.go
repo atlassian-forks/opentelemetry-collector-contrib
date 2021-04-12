@@ -17,6 +17,9 @@ package kinesisexporter
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"go.uber.org/zap/zapcore"
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/component"
@@ -33,6 +36,7 @@ const (
 type exporter struct {
 	producer   producer
 	logger     *zap.Logger
+	sLogger    *zap.Logger
 	marshaller Marshaller
 }
 
@@ -45,12 +49,20 @@ func newExporter(c *Config, logger *zap.Logger) (*exporter, error) {
 		return nil, fmt.Errorf("unrecognized encoding")
 	}
 
+	sLogger := logger.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+		return zapcore.NewSamplerWithOptions(
+			core,
+			time.Duration(1)*time.Second,
+			20, 1000,
+		)
+	}))
+
 	pr, err := newKinesisProducer(c, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	return &exporter{producer: pr, marshaller: marshaller, logger: logger}, nil
+	return &exporter{producer: pr, marshaller: marshaller, logger: logger, sLogger: sLogger}, nil
 }
 
 // start tells the exporter to start. The exporter may prepare for exporting
@@ -110,8 +122,31 @@ func (e *exporter) pushMetrics(ctx context.Context, md pdata.Metrics) (int, erro
 	if err = e.producer.put(pBatches, uuid.New().String()); err != nil {
 		tenants := metricTenants(md)
 		e.logger.Error("error exporting metrics to kinesis", zap.Error(err), zap.Strings("services", tenants))
+		e.sampleMetric(md)
 		return md.MetricCount(), err
 	}
 
 	return 0, nil
+}
+
+func (e *exporter) sampleMetric(md pdata.Metrics) {
+	for i := 0; i < md.ResourceMetrics().Len(); i++ {
+		rm := md.ResourceMetrics().At(i)
+		res := rm.Resource()
+		resAttr := make([]string, res.Attributes().Len())
+		// Adding resources
+		res.Attributes().ForEach(func(k string, v pdata.AttributeValue) {
+			resAttr = append(resAttr, fmt.Sprintf("%s: %s", k, v.StringVal()))
+		})
+
+		var metrics []string
+		for j := 0; j < rm.InstrumentationLibraryMetrics().Len(); j++ {
+			ilm := rm.InstrumentationLibraryMetrics().At(j)
+			for k := 0; k < ilm.Metrics().Len(); k++ {
+				m := ilm.Metrics().At(k)
+				metrics = append(metrics, fmt.Sprintf("%s: %s", m.Name(), m.DataType()))
+			}
+		}
+		e.sLogger.Error("dropped metrics", zap.Strings("resource", resAttr), zap.Strings("metrics", metrics))
+	}
 }
