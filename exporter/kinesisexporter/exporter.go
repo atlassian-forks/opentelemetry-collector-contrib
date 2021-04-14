@@ -122,31 +122,9 @@ func (e *exporter) pushMetrics(ctx context.Context, md pdata.Metrics) (int, erro
 	if err = e.producer.put(pBatches, uuid.New().String()); err != nil {
 		tenants := metricTenants(md)
 		e.logger.Error("error exporting metrics to kinesis", zap.Error(err), zap.Strings("services", tenants))
-		e.sampleMetric(md)
+		e.sLogger.Error("dropped metrics", zap.String("payload", MetricsLog(md)))
 		return md.MetricCount(), err
 	}
 
 	return 0, nil
-}
-
-func (e *exporter) sampleMetric(md pdata.Metrics) {
-	for i := 0; i < md.ResourceMetrics().Len(); i++ {
-		rm := md.ResourceMetrics().At(i)
-		res := rm.Resource()
-		resAttr := make([]string, res.Attributes().Len())
-		// Adding resources
-		res.Attributes().ForEach(func(k string, v pdata.AttributeValue) {
-			resAttr = append(resAttr, fmt.Sprintf("%s: %s", k, v.StringVal()))
-		})
-
-		var metrics []string
-		for j := 0; j < rm.InstrumentationLibraryMetrics().Len(); j++ {
-			ilm := rm.InstrumentationLibraryMetrics().At(j)
-			for k := 0; k < ilm.Metrics().Len(); k++ {
-				m := ilm.Metrics().At(k)
-				metrics = append(metrics, fmt.Sprintf("%s: %s", m.Name(), m.DataType()))
-			}
-		}
-		e.sLogger.Error("dropped metrics", zap.Strings("resource", resAttr), zap.Strings("metrics", metrics))
-	}
 }
