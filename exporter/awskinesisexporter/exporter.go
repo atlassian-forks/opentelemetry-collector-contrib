@@ -16,23 +16,21 @@ package awskinesisexporter
 
 import (
 	"context"
-	"fmt"
 
-	"go.uber.org/zap"
-
-	awskinesis "github.com/signalfx/opencensus-go-exporter-kinesis"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.uber.org/zap"
 
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awskinesisexporter/internal/translate"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awskinesisexporter/internal/batch"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awskinesisexporter/internal/producer"
 )
 
 // Exporter implements an OpenTelemetry trace exporter that exports all spans to AWS Kinesis
 type Exporter struct {
-	awskinesis *awskinesis.Exporter
-	ew         translate.ExportWriter
-	logger     *zap.Logger
+	producer producer.BatchExporter
+	batcher  batch.Encoder
+	logger   *zap.Logger
 }
 
 var _ component.TracesExporter = (*Exporter)(nil)
@@ -52,15 +50,14 @@ func (e Exporter) Capabilities() consumer.Capabilities {
 
 // Shutdown is invoked during exporter shutdown.
 func (e Exporter) Shutdown(context.Context) error {
-	e.awskinesis.Flush()
 	return nil
 }
 
 // ConsumeTraces receives a span batch and exports it to AWS Kinesis
-func (e Exporter) ConsumeTraces(_ context.Context, td pdata.Traces) error {
-	err := e.ew.WriteTraces(td)
+func (e Exporter) ConsumeTraces(ctx context.Context, td pdata.Traces) error {
+	bt, err := e.batcher.Traces(td)
 	if err != nil {
-		err = fmt.Errorf("issues writing traces to kinesis: %w", err)
+		return err
 	}
-	return err
+	return e.producer.Put(ctx, bt)
 }
