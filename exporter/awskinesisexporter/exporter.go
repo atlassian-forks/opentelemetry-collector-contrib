@@ -20,7 +20,6 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.uber.org/zap"
@@ -37,12 +36,9 @@ type Exporter struct {
 	marshaller Marshaller
 }
 
-var _ component.TracesExporter = (*Exporter)(nil)
-var _ component.MetricsExporter = (*Exporter)(nil)
-
-// newExporter creates a new exporter with the passed in configurations.
+// NewExporter creates a new exporter with the passed in configurations.
 // It starts the AWS session and setups the relevant connections.
-func newExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
+func NewExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 	// Get marshaller based on config
 	marshaller := defaultMarshallers()[c.Encoding]
 	if marshaller == nil {
@@ -57,11 +53,7 @@ func newExporter(c *Config, logger *zap.Logger) (*Exporter, error) {
 	return &Exporter{producer: pr, marshaller: marshaller, logger: logger}, nil
 }
 
-// Start tells the exporter to start. The exporter may prepare for exporting
-// by connecting to the endpoint. Host parameter can be used for communicating
-// with the host after Start() has already returned. If error is returned by
-// Start() then the collector startup will be aborted.
-func (e *Exporter) Start(ctx context.Context, _ component.Host) error {
+func (e Exporter) start(ctx context.Context, _ component.Host) error {
 	if ctx == nil || ctx.Err() != nil {
 		return fmt.Errorf(errInvalidContext)
 	}
@@ -70,13 +62,7 @@ func (e *Exporter) Start(ctx context.Context, _ component.Host) error {
 	return nil
 }
 
-// Capabilities implements the consumer interface.
-func (e Exporter) Capabilities() consumer.Capabilities {
-	return consumer.Capabilities{MutatesData: false}
-}
-
-// Shutdown is invoked during exporter shutdown.
-func (e Exporter) Shutdown(ctx context.Context) error {
+func (e Exporter) close(ctx context.Context) error {
 	if ctx == nil || ctx.Err() != nil {
 		return fmt.Errorf(errInvalidContext)
 	}
@@ -85,8 +71,7 @@ func (e Exporter) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// ConsumeTraces receives a span batch and exports it to AWS Kinesis
-func (e Exporter) ConsumeTraces(ctx context.Context, td pdata.Traces) error {
+func (e Exporter) tracesDataPusher(ctx context.Context, td pdata.Traces) error {
 	if ctx == nil || ctx.Err() != nil {
 		return fmt.Errorf(errInvalidContext)
 	}
@@ -105,7 +90,7 @@ func (e Exporter) ConsumeTraces(ctx context.Context, td pdata.Traces) error {
 	return nil
 }
 
-func (e Exporter) ConsumeMetrics(ctx context.Context, md pdata.Metrics) error {
+func (e Exporter) metricsDataPusher(ctx context.Context, md pdata.Metrics) error {
 	if ctx == nil || ctx.Err() != nil {
 		return fmt.Errorf(errInvalidContext)
 	}

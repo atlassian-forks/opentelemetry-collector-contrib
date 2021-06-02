@@ -48,8 +48,42 @@ func TestNewKinesisExporter(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, err := newExporter(cfg, zaptest.NewLogger(t))
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
 	assert.NotNil(t, exp)
+	assert.NoError(t, err)
+}
+
+func TestNewKinesisExporterStartUp(t *testing.T) {
+	t.Parallel()
+	cfg := createDefaultConfig().(*Config)
+	require.NotNil(t, cfg)
+
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
+	require.NoError(t, err)
+	mockProducer := new(producerMock)
+	exp.producer = mockProducer
+	require.NotNil(t, exp)
+
+	mockProducer.On("start").Return(nil)
+
+	err = exp.start(context.Background(), nil)
+	assert.NoError(t, err)
+}
+
+func TestNewKinesisExporterShutdown(t *testing.T) {
+	t.Parallel()
+	cfg := createDefaultConfig().(*Config)
+	require.NotNil(t, cfg)
+
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
+	require.NoError(t, err)
+	mockProducer := new(producerMock)
+	exp.producer = mockProducer
+	require.NotNil(t, exp)
+
+	mockProducer.On("stop").Return(nil)
+
+	err = exp.close(context.Background())
 	assert.NoError(t, err)
 }
 
@@ -59,7 +93,7 @@ func TestNewKinesisExporterBadEncoding(t *testing.T) {
 	require.NotNil(t, cfg)
 	cfg.Encoding = ""
 
-	exp, err := newExporter(cfg, zaptest.NewLogger(t))
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
 	assert.Nil(t, exp)
 	assert.Errorf(t, err, "unrecognized encoding")
 }
@@ -69,14 +103,15 @@ func TestPushingTracesToKinesisQueue(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
+	require.NoError(t, err)
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
 
 	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(nil)
 
-	err := exp.ConsumeTraces(context.Background(), pdata.NewTraces())
+	err = exp.tracesDataPusher(context.Background(), pdata.NewTraces())
 	require.NoError(t, err)
 }
 
@@ -85,14 +120,15 @@ func TestErrorPushingTracesToKinesisQueue(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
+	require.NoError(t, err)
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
 
 	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(fmt.Errorf("someerror"))
 
-	err := exp.ConsumeTraces(context.Background(), pdata.NewTraces())
+	err = exp.tracesDataPusher(context.Background(), pdata.NewTraces())
 	require.Error(t, err)
 }
 
@@ -101,14 +137,15 @@ func TestPushingMetricsToKinesisQueue(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
+	require.NoError(t, err)
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
 
 	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(nil)
 
-	err := exp.ConsumeMetrics(context.Background(), pdata.NewMetrics())
+	err = exp.metricsDataPusher(context.Background(), pdata.NewMetrics())
 	require.NoError(t, err)
 }
 
@@ -117,13 +154,14 @@ func TestErrorPushingMetricsToKinesisQueue(t *testing.T) {
 	cfg := createDefaultConfig().(*Config)
 	require.NotNil(t, cfg)
 
-	exp, _ := newExporter(cfg, zaptest.NewLogger(t))
+	exp, err := NewExporter(cfg, zaptest.NewLogger(t))
+	require.NoError(t, err)
 	mockProducer := new(producerMock)
 	exp.producer = mockProducer
 	require.NotNil(t, exp)
 
 	mockProducer.On("put", mock.Anything, mock.AnythingOfType("string")).Return(fmt.Errorf("someerror"))
 
-	err := exp.ConsumeMetrics(context.Background(), pdata.NewMetrics())
+	err = exp.metricsDataPusher(context.Background(), pdata.NewMetrics())
 	require.Error(t, err)
 }
