@@ -20,6 +20,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/exporter/exporterhelper"
 )
 
@@ -67,7 +68,18 @@ func createTracesExporter(
 		return nil, err
 	}
 	c := config.(*Config)
-	return newExporter(c, params.Logger)
+	exp, err := NewExporter(c, params.Logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return exporterhelper.NewTracesExporter(
+		c,
+		params.Logger,
+		exp.tracesDataPusher,
+		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
+		exporterhelper.WithStart(exp.start),
+		exporterhelper.WithShutdown(exp.close))
 }
 
 func createMetricsExporter(
@@ -79,7 +91,18 @@ func createMetricsExporter(
 		return nil, err
 	}
 	c := config.(*Config)
-	return newExporter(c, params.Logger)
+	exp, err := NewExporter(c, params.Logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return exporterhelper.NewMetricsExporter(
+		c,
+		params.Logger,
+		exp.metricsDataPusher,
+		exporterhelper.WithCapabilities(consumer.Capabilities{MutatesData: false}),
+		exporterhelper.WithStart(exp.start),
+		exporterhelper.WithShutdown(exp.close))
 }
 
 func validateParams(ctx context.Context, params component.ExporterCreateParams, _ config.Exporter) error {
