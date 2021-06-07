@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/stretchr/testify v1.7.0
-	go.etcd.io/bbolt v1.3.4
+	go.etcd.io/bbolt v1.3.6
 	go.opentelemetry.io/collector v0.27.0
 	go.uber.org/zap v1.16.0
 )
