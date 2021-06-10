@@ -40,6 +40,8 @@ type MockKinesisAPI struct {
 	op func(*kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error)
 }
 
+var _ kinesisiface.KinesisAPI = (*MockKinesisAPI)(nil)
+
 func (mka *MockKinesisAPI) PutRecordsWithContext(ctx context.Context, r *kinesis.PutRecordsInput, opts ...request.Option) (*kinesis.PutRecordsOutput, error) {
 	return mka.op(r)
 }
@@ -48,7 +50,7 @@ func SetPutRecordsOperation(op func(r *kinesis.PutRecordsInput) (*kinesis.PutRec
 	return &MockKinesisAPI{op: op}
 }
 
-func SuccessfulPutRecordOperation(_ *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
+func SuccessfulPutRecordsOperation(_ *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
 	return &kinesis.PutRecordsOutput{
 		FailedRecordCount: aws.Int64(0),
 		Records: []*kinesis.PutRecordsResultEntry{
@@ -57,7 +59,7 @@ func SuccessfulPutRecordOperation(_ *kinesis.PutRecordsInput) (*kinesis.PutRecor
 	}, nil
 }
 
-func HardFailedPutRecordOperation(r *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
+func HardFailedPutRecordsOperation(r *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
 	return &kinesis.PutRecordsOutput{FailedRecordCount: aws.Int64(int64(len(r.Records)))}, awserr.New(
 		kinesis.ErrCodeResourceNotFoundException,
 		"testing incorrect kinesis configuration",
@@ -65,7 +67,7 @@ func HardFailedPutRecordOperation(r *kinesis.PutRecordsInput) (*kinesis.PutRecor
 	)
 }
 
-func TransiantPutRecordOperation(recoverAfter int) func(_ *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
+func TransiantPutRecordsOperation(recoverAfter int) func(_ *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
 	attempt := 0
 	return func(r *kinesis.PutRecordsInput) (*kinesis.PutRecordsOutput, error) {
 		if attempt < recoverAfter {
@@ -76,7 +78,7 @@ func TransiantPutRecordOperation(recoverAfter int) func(_ *kinesis.PutRecordsInp
 				errors.New("test case throttled"),
 			)
 		}
-		return SuccessfulPutRecordOperation(r)
+		return SuccessfulPutRecordsOperation(r)
 	}
 }
 
@@ -89,9 +91,9 @@ func TestBatchedExporter(t *testing.T) {
 		shouldErr    bool
 		isPermanent  bool
 	}{
-		{name: "Successful put to kinesis", PutRecordsOP: SuccessfulPutRecordOperation, shouldErr: false, isPermanent: false},
-		{name: "Invalid kinesis configuration", PutRecordsOP: HardFailedPutRecordOperation, shouldErr: true, isPermanent: true},
-		{name: "Test throttled kinesis operation", PutRecordsOP: TransiantPutRecordOperation(2), shouldErr: true, isPermanent: false},
+		{name: "Successful put to kinesis", PutRecordsOP: SuccessfulPutRecordsOperation, shouldErr: false, isPermanent: false},
+		{name: "Invalid kinesis configuration", PutRecordsOP: HardFailedPutRecordsOperation, shouldErr: true, isPermanent: true},
+		{name: "Test throttled kinesis operation", PutRecordsOP: TransiantPutRecordsOperation(2), shouldErr: true, isPermanent: false},
 	}
 
 	bt := batch.New()

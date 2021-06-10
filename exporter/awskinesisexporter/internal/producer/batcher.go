@@ -34,9 +34,9 @@ type batcher struct {
 	log    *zap.Logger
 }
 
-var _ BatchExporter = (*batcher)(nil)
+var _ Batcher = (*batcher)(nil)
 
-func NewBatcher(kinesisAPI kinesisiface.KinesisAPI, stream string, opts ...BatchedExporterOption) (BatchExporter, error) {
+func NewBatcher(kinesisAPI kinesisiface.KinesisAPI, stream string, opts ...BatcherOptions) (Batcher, error) {
 	be := &batcher{
 		stream: aws.String(stream),
 		client: kinesisAPI,

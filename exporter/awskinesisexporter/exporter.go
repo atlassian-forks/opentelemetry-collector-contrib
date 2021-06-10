@@ -28,12 +28,16 @@ import (
 
 // Exporter implements an OpenTelemetry trace exporter that exports all spans to AWS Kinesis
 type Exporter struct {
-	producer producer.BatchExporter
+	producer producer.Batcher
 	batcher  batch.Encoder
 	logger   *zap.Logger
 }
 
-var _ component.TracesExporter = (*Exporter)(nil)
+var (
+	_ component.TracesExporter  = (*Exporter)(nil)
+	_ component.MetricsExporter = (*Exporter)(nil)
+	_ component.LogsExporter    = (*Exporter)(nil)
+)
 
 // Start tells the exporter to start. The exporter may prepare for exporting
 // by connecting to the endpoint. Host parameter can be used for communicating
@@ -56,6 +60,22 @@ func (e Exporter) Shutdown(context.Context) error {
 // ConsumeTraces receives a span batch and exports it to AWS Kinesis
 func (e Exporter) ConsumeTraces(ctx context.Context, td pdata.Traces) error {
 	bt, err := e.batcher.Traces(td)
+	if err != nil {
+		return err
+	}
+	return e.producer.Put(ctx, bt)
+}
+
+func (e Exporter) ConsumeMetrics(ctx context.Context, md pdata.Metrics) error {
+	bt, err := e.batcher.Metrics(md)
+	if err != nil {
+		return err
+	}
+	return e.producer.Put(ctx, bt)
+}
+
+func (e Exporter) ConsumeLogs(ctx context.Context, ld pdata.Logs) error {
+	bt, err := e.batcher.Logs(ld)
 	if err != nil {
 		return err
 	}

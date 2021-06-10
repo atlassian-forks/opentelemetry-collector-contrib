@@ -20,9 +20,10 @@ import (
 	"go.uber.org/zap"
 )
 
-type BatchedExporterOption func(*batcher) error
+type BatcherOptions func(*batcher) error
 
-func WithLogger(l *zap.Logger) BatchedExporterOption {
+// WithLogger sets the provided logger for the Batcher
+func WithLogger(l *zap.Logger) BatcherOptions {
 	return func(p *batcher) error {
 		if l == nil {
 			return errors.New("nil logger trying to be assigned")

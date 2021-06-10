@@ -36,13 +36,22 @@ var (
 )
 
 type Batch struct {
-	records []*kinesis.PutRecordsRequestEntry
+	maxBatchSize  int
+	maxRecordSize int
+	records       []*kinesis.PutRecordsRequestEntry
 }
 
 func New() *Batch {
-	return &Batch{records: make([]*kinesis.PutRecordsRequestEntry, 0, maxRecordSize)}
+	return &Batch{
+		maxBatchSize:  maxBatchedRecords,
+		maxRecordSize: maxRecordSize,
+		records:       make([]*kinesis.PutRecordsRequestEntry, 0, maxRecordSize),
+	}
 }
 
+// Add accepts type that can be marshalled into a protobuf byte array
+// with the partition key. An error is returned when the marshaled data
+// or the key exceeds the kinesis API limits.
 func (b *Batch) Add(message proto.Message, key string) error {
 	data, err := proto.Marshal(message)
 	if err != nil {
@@ -53,7 +62,7 @@ func (b *Batch) Add(message proto.Message, key string) error {
 		return ErrPartitionKeyLength
 	}
 
-	if len(data) > maxRecordSize {
+	if len(data) > b.maxRecordSize {
 		return ErrRecordLength
 	}
 
@@ -61,12 +70,12 @@ func (b *Batch) Add(message proto.Message, key string) error {
 	return nil
 }
 
+// Chunk breaks up the iternal queue into blocks that can be used
+// to be written to he kinesis.PutRecords endpoint
 func (b *Batch) Chunk() [][]*kinesis.PutRecordsRequestEntry {
-	chunk := make([][]*kinesis.PutRecordsRequestEntry, 0, len(b.records)/maxBatchedRecords+1)
-	for i := 0; i < len(b.records); {
-		end := min(maxBatchedRecords, len(b.records)-i) + i
+	length, chunk := len(b.records), make([][]*kinesis.PutRecordsRequestEntry, 0, len(b.records)/maxBatchedRecords+1)
+	for i, end := 0, min(length, b.maxBatchSize); i < length; i, end = i+end, i+min(b.maxBatchSize, length-i) {
 		chunk = append(chunk, b.records[i:end])
-		i += end
 	}
 	return chunk
 }
