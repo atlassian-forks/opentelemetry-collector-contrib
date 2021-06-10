@@ -19,7 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/kinesis"
-	"github.com/golang/protobuf/proto" //nolint:ignore SA1019 // this is needed due to existing export types no migrating to the package
+	"github.com/golang/protobuf/proto" //nolint:staticcheck // This is need due to libraries using old proto package
 	"go.opentelemetry.io/collector/consumer/consumererror"
 )
 
