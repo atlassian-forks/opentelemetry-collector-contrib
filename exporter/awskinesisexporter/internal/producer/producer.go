@@ -27,4 +27,7 @@ type Batcher interface {
 	// will result in consumeerr.Permanent being returned to allow for existing retry patterns within
 	// the project to be used.
 	Put(ctx context.Context, b *batch.Batch) error
+
+	// Ready ensures that the configuration is valid and can write the configured stream.
+	Ready(ctx context.Context) error
 }

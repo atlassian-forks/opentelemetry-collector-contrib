@@ -43,8 +43,8 @@ var (
 // by connecting to the endpoint. Host parameter can be used for communicating
 // with the host after Start() has already returned. If error is returned by
 // Start() then the collector startup will be aborted.
-func (e Exporter) Start(_ context.Context, _ component.Host) error {
-	return nil
+func (e Exporter) Start(ctx context.Context, _ component.Host) error {
+	return e.producer.Ready(ctx)
 }
 
 // Capabilities implements the consumer interface.

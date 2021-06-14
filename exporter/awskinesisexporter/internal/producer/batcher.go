@@ -50,10 +50,10 @@ func NewBatcher(kinesisAPI kinesisiface.KinesisAPI, stream string, opts ...Batch
 	return be, nil
 }
 
-func (p *batcher) Put(ctx context.Context, bt *batch.Batch) error {
+func (b *batcher) Put(ctx context.Context, bt *batch.Batch) error {
 	for _, records := range bt.Chunk() {
-		out, err := p.client.PutRecordsWithContext(ctx, &kinesis.PutRecordsInput{
-			StreamName: p.stream,
+		out, err := b.client.PutRecordsWithContext(ctx, &kinesis.PutRecordsInput{
+			StreamName: b.stream,
 			Records:    records,
 		})
 
@@ -70,11 +70,18 @@ func (p *batcher) Put(ctx context.Context, bt *batch.Batch) error {
 			if out != nil {
 				fields = append(fields, zap.Int64p("failed-records", out.FailedRecordCount))
 			}
-			p.log.Error("Failed to write records to kinesis", fields...)
+			b.log.Error("Failed to write records to kinesis", fields...)
 			return err
 		}
 
-		p.log.Debug("Successfully wrote batch to kinesis", zap.Stringp("stream", p.stream))
+		b.log.Debug("Successfully wrote batch to kinesis", zap.Stringp("stream", b.stream))
 	}
 	return nil
+}
+
+func (b *batcher) Ready(ctx context.Context) error {
+	_, err := b.client.DescribeStreamWithContext(ctx, &kinesis.DescribeStreamInput{
+		StreamName: b.stream,
+	})
+	return err
 }
