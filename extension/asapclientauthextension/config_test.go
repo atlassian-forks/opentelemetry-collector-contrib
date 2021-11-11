@@ -56,7 +56,7 @@ func TestLoadConfig(t *testing.T) {
 
 func TestLoadBadConfig(t *testing.T) {
 	factories, err := componenttest.NopFactories()
-	assert.NoError(t, err)
+require.NoError(t,err)
 
 	tests := []struct {
 		configName  string
