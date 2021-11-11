@@ -17,9 +17,10 @@ package asapauth
 import (
 	"context"
 	"fmt"
-	"go.opentelemetry.io/collector/config/configauth"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/collector/config/configauth"
 
 	asap "bitbucket.org/atlassian/go-asap"
 	"github.com/SermoDigital/jose/crypto"
