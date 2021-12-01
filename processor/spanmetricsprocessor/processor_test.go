@@ -215,6 +215,51 @@ func TestProcessorConsumeTraces(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestResourceCopying(t *testing.T) {
+	// Prepare
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
+
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		rm := input.ResourceMetrics()
+		require.Equal(t, 2, rm.Len())
+
+		serviceAResourceMetrics := rm.At(0)
+		serviceBResourceMetrics := rm.At(1)
+
+		require.Equal(t, 3, serviceAResourceMetrics.Resource().Attributes().Len())
+		require.Equal(t, 1, serviceBResourceMetrics.Resource().Attributes().Len())
+
+		rAttr1, _ := serviceAResourceMetrics.Resource().Attributes().Get("resource1")
+		rAttr2, _ := serviceAResourceMetrics.Resource().Attributes().Get("resource2")
+		serviceAAttr, _ := serviceAResourceMetrics.Resource().Attributes().Get(conventions.AttributeServiceName)
+		require.Equal(t, "1", rAttr1.StringVal())
+		require.Equal(t, "2", rAttr2.StringVal())
+		require.Equal(t, "service-a", serviceAAttr.StringVal())
+
+		serviceBAttr, _ := serviceBResourceMetrics.Resource().Attributes().Get(conventions.AttributeServiceName)
+		require.Equal(t, "service-b", serviceBAttr.StringVal())
+
+		return true
+	})).Return(nil)
+
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+	defaultNullValue := "defaultNullValue"
+	p := newProcessorImp(mexp, tcon, &defaultNullValue)
+
+	traces := buildSampleTrace()
+	traces.ResourceSpans().At(0).Resource().Attributes().Insert("resource1", pdata.NewAttributeValueString("1"))
+	traces.ResourceSpans().At(0).Resource().Attributes().Insert("resource2", pdata.NewAttributeValueString("2"))
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, traces)
+
+	// Verify
+	assert.NoError(t, err)
+}
+
 func TestMetricKeyCache(t *testing.T) {
 	// Prepare
 	mexp := &mocks.MetricsExporter{}
@@ -304,19 +349,33 @@ func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
 	)
 
 	rm := input.ResourceMetrics()
-	require.Equal(t, 1, rm.Len())
+	require.Equal(t, 2, rm.Len())
 
 	ilm := rm.At(0).InstrumentationLibraryMetrics()
 	require.Equal(t, 1, ilm.Len())
 	assert.Equal(t, "spanmetricsprocessor", ilm.At(0).InstrumentationLibrary().Name())
 
 	m := ilm.At(0).Metrics()
-	require.Equal(t, 6, m.Len())
+	require.Equal(t, 4, m.Len())
 
+	verifyMetrics(m, 2, t)
+
+	ilm1 := rm.At(1).InstrumentationLibraryMetrics()
+	require.Equal(t, 1, ilm1.Len())
+	assert.Equal(t, "spanmetricsprocessor", ilm1.At(0).InstrumentationLibrary().Name())
+
+	m1 := ilm1.At(0).Metrics()
+	require.Equal(t, 2, m1.Len())
+	verifyMetrics(m1, 1, t)
+
+	return true
+}
+
+func verifyMetrics(m pdata.MetricSlice, numOfCallCounts int, t *testing.T) {
 	seenMetricIDs := make(map[metricID]bool)
 	mi := 0
-	// The first 3 metrics are for call counts.
-	for ; mi < 3; mi++ {
+	// The first <numOfCallCounts> metrics are for call counts.
+	for ; mi < numOfCallCounts; mi++ {
 		assert.Equal(t, "calls_total", m.At(mi).Name())
 
 		data := m.At(mi).IntSum()
@@ -368,7 +427,6 @@ func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
 		}
 		verifyMetricLabels(dp, t, seenMetricIDs)
 	}
-	return true
 }
 
 func verifyMetricLabels(dp metricDataPoint, t *testing.T, seenMetricIDs map[metricID]bool) {

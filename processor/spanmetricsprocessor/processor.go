@@ -206,7 +206,7 @@ func (p *processorImp) Capabilities() consumer.Capabilities {
 func (p *processorImp) ConsumeTraces(ctx context.Context, traces pdata.Traces) error {
 	p.aggregateMetrics(traces)
 
-	m := p.buildMetrics()
+	m := p.buildMetrics(traces)
 
 	// Firstly, export metrics to avoid being impacted by downstream trace processor errors/latency.
 	if err := p.metricsExporter.ConsumeMetrics(ctx, *m); err != nil {
@@ -219,23 +219,44 @@ func (p *processorImp) ConsumeTraces(ctx context.Context, traces pdata.Traces) e
 
 // buildMetrics collects the computed raw metrics data, builds the metrics object and
 // writes the raw metrics data into the metrics object.
-func (p *processorImp) buildMetrics() *pdata.Metrics {
+func (p *processorImp) buildMetrics(traces pdata.Traces) *pdata.Metrics {
 	m := pdata.NewMetrics()
-	ilm := m.ResourceMetrics().AppendEmpty().InstrumentationLibraryMetrics().AppendEmpty()
-	ilm.InstrumentationLibrary().SetName("spanmetricsprocessor")
 
-	p.lock.RLock()
-	p.collectCallMetrics(ilm)
-	p.collectLatencyMetrics(ilm)
-	p.lock.RUnlock()
+	rms := m.ResourceMetrics()
+	for i := 0; i < traces.ResourceSpans().Len(); i++ {
+		rSpan := traces.ResourceSpans().At(i)
+
+		_, ok := rSpan.Resource().Attributes().Get(conventions.AttributeServiceName)
+		if !ok {
+			continue
+		}
+
+		rm := rms.AppendEmpty()
+		rSpan.Resource().Attributes().Range(func(k string, v pdata.AttributeValue) bool {
+			rm.Resource().Attributes().Insert(k, v)
+			return true
+		})
+
+		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
+		ilm.InstrumentationLibrary().SetName("spanmetricsprocessor")
+		serviceNameAttr, _ := rm.Resource().Attributes().Get(conventions.AttributeServiceName)
+
+		p.lock.RLock()
+		p.collectCallMetrics(ilm, serviceNameAttr.StringVal())
+		p.collectLatencyMetrics(ilm, serviceNameAttr.StringVal())
+		p.lock.RUnlock()
+	}
 
 	return &m
 }
 
 // collectLatencyMetrics collects the raw latency metrics, writing the data
 // into the given instrumentation library metrics.
-func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMetrics) {
+func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMetrics, serviceName string) {
 	for key := range p.latencyCount {
+		if !strings.HasPrefix(string(key), serviceName) {
+			continue
+		}
 		mLatency := ilm.Metrics().AppendEmpty()
 		mLatency.SetDataType(pdata.MetricDataTypeIntHistogram)
 		mLatency.SetName("latency")
@@ -255,8 +276,11 @@ func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMet
 
 // collectCallMetrics collects the raw call count metrics, writing the data
 // into the given instrumentation library metrics.
-func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetrics) {
+func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetrics, serviceName string) {
 	for key := range p.callSum {
+		if !strings.HasPrefix(string(key), serviceName) {
+			continue
+		}
 		mCalls := ilm.Metrics().AppendEmpty()
 		mCalls.SetDataType(pdata.MetricDataTypeIntSum)
 		mCalls.SetName("calls_total")
