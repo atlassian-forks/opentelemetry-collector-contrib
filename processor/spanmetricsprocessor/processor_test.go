@@ -237,21 +237,41 @@ func TestResourceCopying(t *testing.T) {
 		require.Equal(t, 4, serviceAResourceMetrics.Resource().Attributes().Len())
 		require.Equal(t, 2, serviceBResourceMetrics.Resource().Attributes().Len())
 
-		rAttrA1, _ := serviceAResourceMetrics.Resource().Attributes().Get(resourceAttr1)
-		rAttrA2, _ := serviceAResourceMetrics.Resource().Attributes().Get(resourceAttr2)
-		rAttrA3, _ := serviceAResourceMetrics.Resource().Attributes().Get(notInSpanResourceAttr0)
-		serviceAAttr, _ := serviceAResourceMetrics.Resource().Attributes().Get(conventions.AttributeServiceName)
-		require.Equal(t, "1", rAttrA1.StringVal())
-		require.Equal(t, "2", rAttrA2.StringVal())
-		require.Equal(t, defaultNotInSpanAttrVal, rAttrA3.StringVal())
+		wantResourceAttrServiceA := map[string]string{
+			resourceAttr1:          "1",
+			resourceAttr2:          "2",
+			notInSpanResourceAttr0: defaultNotInSpanAttrVal,
+			serviceNameKey:         "service-a",
+		}
+		serviceAResourceMetrics.Resource().Attributes().Range(func(k string, v pdata.AttributeValue) bool {
+			value := v.StringVal()
+			switch k {
+			case notInSpanResourceAttr1:
+				assert.Fail(t, notInSpanResourceAttr1+" should not be in this metric")
+			default:
+				assert.Equal(t, wantResourceAttrServiceA[k], value)
+				delete(wantResourceAttrServiceA, k)
+			}
+			return true
+		})
+		assert.Empty(t, wantResourceAttrServiceA, "Did not see all expected dimensions in metric. Missing: ", wantResourceAttrServiceA)
 
-		require.Equal(t, "service-a", serviceAAttr.StringVal())
-
-		rAttrB1, _ := serviceAResourceMetrics.Resource().Attributes().Get(notInSpanResourceAttr0)
-		serviceBAttr, _ := serviceBResourceMetrics.Resource().Attributes().Get(conventions.AttributeServiceName)
-		require.Equal(t, defaultNotInSpanAttrVal, rAttrB1.StringVal())
-
-		require.Equal(t, "service-b", serviceBAttr.StringVal())
+		wantResourceAttrServiceB := map[string]string{
+			notInSpanResourceAttr0: defaultNotInSpanAttrVal,
+			serviceNameKey:         "service-b",
+		}
+		serviceBResourceMetrics.Resource().Attributes().Range(func(k string, v pdata.AttributeValue) bool {
+			value := v.StringVal()
+			switch k {
+			case notInSpanResourceAttr1:
+				assert.Fail(t, notInSpanResourceAttr1+" should not be in this metric")
+			default:
+				assert.Equal(t, wantResourceAttrServiceB[k], value)
+				delete(wantResourceAttrServiceB, k)
+			}
+			return true
+		})
+		assert.Empty(t, wantResourceAttrServiceB, "Did not see all expected dimensions in metric. Missing: ", wantResourceAttrServiceB)
 
 		return true
 	})).Return(nil)
