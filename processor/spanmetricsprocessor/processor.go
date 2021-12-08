@@ -102,7 +102,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		}
 	}
 
-	if err := validateDimensions(pConfig.Dimensions, []string{serviceNameKey, spanKindKey, statusCodeKey}); err != nil {
+	if err := validateDimensions(pConfig.Dimensions, []string{spanKindKey, statusCodeKey}); err != nil {
 		return nil, err
 	}
 	if err := validateDimensions(pConfig.ResourceAttributes, []string{serviceNameKey}); err != nil {
@@ -348,7 +348,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	key := buildKey(serviceName, span, p.dimensions, p.resourceAttributes)
 
 	p.lock.Lock()
-	p.cache(serviceName, span, key)
+	p.cache(span, key)
 	p.updateCallMetrics(key)
 	p.updateLatencyMetrics(key, latencyInMilliseconds, index)
 	p.lock.Unlock()
@@ -369,9 +369,8 @@ func (p *processorImp) updateLatencyMetrics(key metricKey, latency float64, inde
 	p.latencyBucketCounts[key][index]++
 }
 
-func buildDimensionKVs(serviceName string, span pdata.Span, optionalDims []Dimension) dimKV {
+func buildDimensionKVs(span pdata.Span, optionalDims []Dimension) dimKV {
 	dims := make(dimKV)
-	dims[serviceNameKey] = serviceName
 	dims[operationKey] = span.Name()
 	dims[spanKindKey] = span.Kind().String()
 	dims[statusCodeKey] = span.Status().Code().String()
@@ -426,9 +425,9 @@ func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension, opt
 // cache the dimension key-value map for the metricKey if there is a cache miss.
 // This enables a lookup of the dimension key-value map when constructing the metric like so:
 //   LabelsMap().InitFromMap(p.metricKeyToDimensions[key])
-func (p *processorImp) cache(serviceName string, span pdata.Span, k metricKey) {
+func (p *processorImp) cache(span pdata.Span, k metricKey) {
 	if _, ok := p.metricKeyToDimensions[k]; !ok {
-		p.metricKeyToDimensions[k] = buildDimensionKVs(serviceName, span, p.dimensions)
+		p.metricKeyToDimensions[k] = buildDimensionKVs(span, p.dimensions)
 	}
 }
 

@@ -38,7 +38,6 @@ type Config struct {
 	LatencyHistogramBuckets []time.Duration `mapstructure:"latency_histogram_buckets"`
 
 	// Dimensions defines the list of additional dimensions on top of the provided:
-	// - service.name
 	// - operation
 	// - span.kind
 	// - status.code

@@ -31,7 +31,6 @@ promexample_latency_bucket{http_method="GET",http_status_code="200",label1="valu
 ```
 
 Each metric will have _at least_ the following dimensions because they are common across all spans:
-- Service name
 - Operation
 - Span kind
 - Status code
