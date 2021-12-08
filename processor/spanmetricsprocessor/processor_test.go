@@ -47,6 +47,13 @@ const (
 	notInSpanAttrName0 = "shouldBeInMetric"
 	notInSpanAttrName1 = "shouldNotBeInMetric"
 
+	resourceAttr1          = "resourceAttr1"
+	resourceAttr2          = "resourceAttr2"
+	notInSpanResourceAttr0 = "resourceAttrShouldBeInMetric"
+	notInSpanResourceAttr1 = "resourceAttrShouldNotBeInMetric"
+
+	defaultNotInSpanAttrVal = "defaultNotInSpanAttrVal"
+
 	sampleLatency         = 11
 	sampleLatencyDuration = sampleLatency * time.Millisecond
 )
@@ -227,17 +234,23 @@ func TestResourceCopying(t *testing.T) {
 		serviceAResourceMetrics := rm.At(0)
 		serviceBResourceMetrics := rm.At(1)
 
-		require.Equal(t, 3, serviceAResourceMetrics.Resource().Attributes().Len())
-		require.Equal(t, 1, serviceBResourceMetrics.Resource().Attributes().Len())
+		require.Equal(t, 4, serviceAResourceMetrics.Resource().Attributes().Len())
+		require.Equal(t, 2, serviceBResourceMetrics.Resource().Attributes().Len())
 
-		rAttr1, _ := serviceAResourceMetrics.Resource().Attributes().Get("resource1")
-		rAttr2, _ := serviceAResourceMetrics.Resource().Attributes().Get("resource2")
+		rAttrA1, _ := serviceAResourceMetrics.Resource().Attributes().Get(resourceAttr1)
+		rAttrA2, _ := serviceAResourceMetrics.Resource().Attributes().Get(resourceAttr2)
+		rAttrA3, _ := serviceAResourceMetrics.Resource().Attributes().Get(notInSpanResourceAttr0)
 		serviceAAttr, _ := serviceAResourceMetrics.Resource().Attributes().Get(conventions.AttributeServiceName)
-		require.Equal(t, "1", rAttr1.StringVal())
-		require.Equal(t, "2", rAttr2.StringVal())
+		require.Equal(t, "1", rAttrA1.StringVal())
+		require.Equal(t, "2", rAttrA2.StringVal())
+		require.Equal(t, defaultNotInSpanAttrVal, rAttrA3.StringVal())
+
 		require.Equal(t, "service-a", serviceAAttr.StringVal())
 
+		rAttrB1, _ := serviceAResourceMetrics.Resource().Attributes().Get(notInSpanResourceAttr0)
 		serviceBAttr, _ := serviceBResourceMetrics.Resource().Attributes().Get(conventions.AttributeServiceName)
+		require.Equal(t, defaultNotInSpanAttrVal, rAttrB1.StringVal())
+
 		require.Equal(t, "service-b", serviceBAttr.StringVal())
 
 		return true
@@ -249,8 +262,8 @@ func TestResourceCopying(t *testing.T) {
 	p := newProcessorImp(mexp, tcon, &defaultNullValue)
 
 	traces := buildSampleTrace()
-	traces.ResourceSpans().At(0).Resource().Attributes().Insert("resource1", pdata.NewAttributeValueString("1"))
-	traces.ResourceSpans().At(0).Resource().Attributes().Insert("resource2", pdata.NewAttributeValueString("2"))
+	traces.ResourceSpans().At(0).Resource().Attributes().Insert(resourceAttr1, pdata.NewAttributeValueString("1"))
+	traces.ResourceSpans().At(0).Resource().Attributes().Insert(resourceAttr2, pdata.NewAttributeValueString("2"))
 
 	// Test
 	ctx := metadata.NewIncomingContext(context.Background(), nil)
@@ -310,7 +323,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 }
 
 func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string) *processorImp {
-	defaultNotInSpanAttrVal := "defaultNotInSpanAttrVal"
+	localDefaultNotInSpanAttrVal := defaultNotInSpanAttrVal
 	return &processorImp{
 		logger:          zap.NewNop(),
 		metricsExporter: mexp,
@@ -332,9 +345,15 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			{arrayAttrName, nil},
 			{nullAttrName, defaultNullValue},
 			// Add a default value for an attribute that doesn't exist in a span
-			{notInSpanAttrName0, &defaultNotInSpanAttrVal},
+			{notInSpanAttrName0, &localDefaultNotInSpanAttrVal},
 			// Leave the default value unset to test that this dimension should not be added to the metric.
 			{notInSpanAttrName1, nil},
+		},
+		resourceAttributes: []Dimension{
+			{resourceAttr1, nil},
+			{resourceAttr2, nil},
+			{notInSpanResourceAttr0, &localDefaultNotInSpanAttrVal},
+			{notInSpanResourceAttr1, nil},
 		},
 		metricKeyToDimensions: make(map[metricKey]dimKV),
 	}
@@ -439,7 +458,7 @@ func verifyMetricLabels(dp metricDataPoint, t *testing.T, seenMetricIDs map[metr
 		nullAttrName:       "",
 		arrayAttrName:      "[]",
 		mapAttrName:        "{}",
-		notInSpanAttrName0: "defaultNotInSpanAttrVal",
+		notInSpanAttrName0: defaultNotInSpanAttrVal,
 	}
 	dp.LabelsMap().Range(func(k string, v string) bool {
 		switch k {
@@ -551,11 +570,11 @@ func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExpo
 func TestBuildKey(t *testing.T) {
 	span0 := pdata.NewSpan()
 	span0.SetName("c")
-	k0 := buildKey("ab", span0, nil)
+	k0 := buildKey("ab", span0, nil, nil)
 
 	span1 := pdata.NewSpan()
 	span1.SetName("bc")
-	k1 := buildKey("a", span1, nil)
+	k1 := buildKey("a", span1, nil, nil)
 
 	assert.NotEqual(t, k0, k1)
 }
@@ -631,7 +650,7 @@ func TestValidateDimensions(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateDimensions(tc.dimensions)
+			err := validateDimensions(tc.dimensions, []string{serviceNameKey, spanKindKey, statusCodeKey})
 			if tc.expectedErr != "" {
 				assert.EqualError(t, err, tc.expectedErr)
 			} else {

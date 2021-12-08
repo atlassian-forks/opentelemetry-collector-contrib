@@ -66,6 +66,9 @@ type processorImp struct {
 	// Additional dimensions to add to metrics.
 	dimensions []Dimension
 
+	// Additional resourceAttributes to add to metrics.
+	resourceAttributes []Dimension
+
 	// The starting time of the data points.
 	startTime time.Time
 
@@ -99,7 +102,10 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		}
 	}
 
-	if err := validateDimensions(pConfig.Dimensions); err != nil {
+	if err := validateDimensions(pConfig.Dimensions, []string{serviceNameKey, spanKindKey, statusCodeKey}); err != nil {
+		return nil, err
+	}
+	if err := validateDimensions(pConfig.ResourceAttributes, []string{serviceNameKey}); err != nil {
 		return nil, err
 	}
 
@@ -114,6 +120,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		latencyBucketCounts:   make(map[metricKey][]uint64),
 		nextConsumer:          nextConsumer,
 		dimensions:            pConfig.Dimensions,
+		resourceAttributes:    pConfig.ResourceAttributes,
 		metricKeyToDimensions: make(map[metricKey]dimKV),
 	}, nil
 }
@@ -128,9 +135,9 @@ func mapDurationsToMillis(vs []time.Duration, f func(duration time.Duration) flo
 
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions. Considering
 // the usage of Prometheus related exporters, we also validate the dimensions after sanitization.
-func validateDimensions(dimensions []Dimension) error {
+func validateDimensions(dimensions []Dimension, defaults []string) error {
 	labelNames := make(map[string]struct{})
-	for _, key := range []string{serviceNameKey, spanKindKey, statusCodeKey} {
+	for _, key := range defaults {
 		labelNames[key] = struct{}{}
 		labelNames[sanitize(key)] = struct{}{}
 	}
@@ -226,16 +233,22 @@ func (p *processorImp) buildMetrics(traces pdata.Traces) *pdata.Metrics {
 	for i := 0; i < traces.ResourceSpans().Len(); i++ {
 		rSpan := traces.ResourceSpans().At(i)
 
-		_, ok := rSpan.Resource().Attributes().Get(conventions.AttributeServiceName)
+		resourceAttrServiceName, ok := rSpan.Resource().Attributes().Get(conventions.AttributeServiceName)
 		if !ok {
 			continue
 		}
 
 		rm := rms.AppendEmpty()
-		rSpan.Resource().Attributes().Range(func(k string, v pdata.AttributeValue) bool {
-			rm.Resource().Attributes().Insert(k, v)
-			return true
-		})
+		rm.Resource().Attributes().Insert(serviceNameKey, resourceAttrServiceName)
+		for _, d := range p.resourceAttributes {
+			if attr, ok := rSpan.Resource().Attributes().Get(d.Name); ok {
+				rm.Resource().Attributes().Insert(d.Name, attr)
+			} else if d.Default != nil {
+				// Set the default if configured, otherwise this metric should have no value set for the resource attribute.
+				attrValue := pdata.NewAttributeValueString(*d.Default)
+				rm.Resource().Attributes().Insert(d.Name, attrValue)
+			}
+		}
 
 		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
 		ilm.InstrumentationLibrary().SetName("spanmetricsprocessor")
@@ -332,7 +345,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
-	key := buildKey(serviceName, span, p.dimensions)
+	key := buildKey(serviceName, span, p.dimensions, p.resourceAttributes)
 
 	p.lock.Lock()
 	p.cache(serviceName, span, key)
@@ -386,7 +399,7 @@ func concatDimensionValue(metricKeyBuilder *strings.Builder, value string, prefi
 // buildKey builds the metric key from the service name and span metadata such as operation, kind, status_code and
 // any additional dimensions the user has configured.
 // The metric key is a simple concatenation of dimension values.
-func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension) metricKey {
+func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension, optionalResourceAttrs []Dimension) metricKey {
 	var metricKeyBuilder strings.Builder
 	concatDimensionValue(&metricKeyBuilder, serviceName, false)
 	concatDimensionValue(&metricKeyBuilder, span.Name(), true)

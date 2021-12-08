@@ -45,4 +45,11 @@ type Config struct {
 	// The dimensions will be fetched from the span's attributes. Examples of some conventionally used attributes:
 	// https://github.com/open-telemetry/opentelemetry-collector/blob/main/translator/conventions/opentelemetry.go.
 	Dimensions []Dimension `mapstructure:"dimensions"`
+
+	// ResourceAttributes defines the list of additional resource attributes to attach to metrics on top of the provided:
+	// - service.name
+	// These will be fetched from the span's resource attributes. For more details, see:
+	// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md
+	// and https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md.
+	ResourceAttributes []Dimension `mapstructure:"resource_attributes"`
 }
