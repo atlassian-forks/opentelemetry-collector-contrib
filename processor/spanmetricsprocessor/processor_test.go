@@ -350,10 +350,10 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 		nextConsumer:    tcon,
 
 		startTime:           time.Now(),
-		callSum:             make(map[metricKey]int64),
-		latencySum:          make(map[metricKey]float64),
-		latencyCount:        make(map[metricKey]uint64),
-		latencyBucketCounts: make(map[metricKey][]uint64),
+		callSum:             make(map[metricKey]map[metricKey]int64),
+		latencySum:          make(map[metricKey]map[metricKey]float64),
+		latencyCount:        make(map[metricKey]map[metricKey]uint64),
+		latencyBucketCounts: make(map[metricKey]map[metricKey][]uint64),
 		latencyBounds:       defaultLatencyHistogramBucketsMs,
 		dimensions: []Dimension{
 			// Set nil defaults to force a lookup for the attribute in the span.
@@ -375,6 +375,7 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			{notInSpanResourceAttr0, &localDefaultNotInSpanAttrVal},
 			{notInSpanResourceAttr1, nil},
 		},
+		resourceAttrList:      make(map[metricKey]bool),
 		metricKeyToDimensions: make(map[metricKey]dimKV),
 	}
 }
@@ -482,8 +483,6 @@ func verifyMetricLabels(dp metricDataPoint, t *testing.T, seenMetricIDs map[metr
 	}
 	dp.LabelsMap().Range(func(k string, v string) bool {
 		switch k {
-		case serviceNameKey:
-			mID.service = v
 		case operationKey:
 			mID.operation = v
 		case spanKindKey:
@@ -590,11 +589,11 @@ func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExpo
 func TestBuildKey(t *testing.T) {
 	span0 := pdata.NewSpan()
 	span0.SetName("c")
-	k0 := buildKey("ab", span0, nil, nil)
+	k0 := buildMetricKey(span0, nil)
 
 	span1 := pdata.NewSpan()
 	span1.SetName("bc")
-	k1 := buildKey("a", span1, nil, nil)
+	k1 := buildMetricKey(span1, nil)
 
 	assert.NotEqual(t, k0, k1)
 }
@@ -606,6 +605,22 @@ func TestProcessorDuplicateDimensions(t *testing.T) {
 	// Duplicate dimension with reserved label after sanitization.
 	cfg.Dimensions = []Dimension{
 		{Name: "status_code"},
+	}
+
+	// Test
+	next := new(consumertest.TracesSink)
+	p, err := newProcessor(zap.NewNop(), cfg, next)
+	assert.Error(t, err)
+	assert.Nil(t, p)
+}
+
+func TestProcessorDuplicateResourceAttributes(t *testing.T) {
+	// Prepare
+	factory := NewFactory()
+	cfg := factory.CreateDefaultConfig().(*Config)
+	// Duplicate dimension with reserved label after sanitization.
+	cfg.ResourceAttributes = []Dimension{
+		{Name: "service.name"},
 	}
 
 	// Test
@@ -686,4 +701,47 @@ func TestSanitize(t *testing.T) {
 	require.Equal(t, "key_0test", sanitize("0test"))
 	require.Equal(t, "test", sanitize("test"))
 	require.Equal(t, "test__", sanitize("test_/"))
+}
+
+func TestTraceWithoutServiceNameDoesNotGenerateMetrics(t *testing.T) {
+	// Prepare
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
+
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		require.Equal(t, 0, input.MetricCount(),
+			"Should be 0 as the trace does not have a service name and hence is skipped when building metrics",
+		)
+		return true
+	})).Return(nil)
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+	defaultNullValue := "defaultNullValue"
+	p := newProcessorImp(mexp, tcon, &defaultNullValue)
+
+	trace := pdata.NewTraces()
+
+	initServiceSpans(
+		serviceSpans{
+			serviceName: "",
+			spans: []span{
+				{
+					operation:  "/ping",
+					kind:       pdata.SpanKindServer,
+					statusCode: pdata.StatusCodeOk,
+				},
+				{
+					operation:  "/ping",
+					kind:       pdata.SpanKindClient,
+					statusCode: pdata.StatusCodeOk,
+				},
+			},
+		}, trace.ResourceSpans().AppendEmpty())
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, trace)
+
+	// Verify
+	assert.NoError(t, err)
 }
