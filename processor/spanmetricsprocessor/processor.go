@@ -237,8 +237,8 @@ func (p *processorImp) buildMetrics() *pdata.Metrics {
 	rms := m.ResourceMetrics()
 	for key := range p.resourceAttrList {
 		p.lock.RLock()
-		raKey := metricKey(key)
-		resourceAttributesMap := p.metricKeyToDimensions[raKey]
+		resourceAttrKey := metricKey(key)
+		resourceAttributesMap := p.metricKeyToDimensions[resourceAttrKey]
 
 		// if the service name doesn't exist, we treat it as invalid and do not generate a trace
 		if _, ok := resourceAttributesMap[serviceNameKey]; !ok {
@@ -257,8 +257,8 @@ func (p *processorImp) buildMetrics() *pdata.Metrics {
 		ilm.InstrumentationLibrary().SetName("spanmetricsprocessor")
 
 		// build metrics per resource
-		p.collectCallMetrics(ilm, raKey)
-		p.collectLatencyMetrics(ilm, raKey)
+		p.collectCallMetrics(ilm, resourceAttrKey)
+		p.collectLatencyMetrics(ilm, resourceAttrKey)
 		p.lock.RUnlock()
 	}
 
@@ -342,49 +342,49 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
 	mKey := buildMetricKey(span, p.dimensions)
-	raKey := buildResourceAttrKey(serviceName, p.resourceAttributes, resourceAttr)
+	resourceAttrKey := buildResourceAttrKey(serviceName, p.resourceAttributes, resourceAttr)
 
 	p.lock.Lock()
-	p.resourceAttrList[raKey] = true
+	p.resourceAttrList[resourceAttrKey] = true
 	p.cacheMetricKey(span, mKey)
-	p.cacheResourceAttrKey(serviceName, resourceAttr, raKey)
-	p.updateCallMetrics(raKey, mKey)
-	p.updateLatencyMetrics(raKey, mKey, latencyInMilliseconds, index)
+	p.cacheResourceAttrKey(serviceName, resourceAttr, resourceAttrKey)
+	p.updateCallMetrics(resourceAttrKey, mKey)
+	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index)
 	p.lock.Unlock()
 }
 
 // updateCallMetrics increments the call count for the given metric key.
-func (p *processorImp) updateCallMetrics(raKey metricKey, mkey metricKey) {
-	if _, ok := p.callSum[raKey]; ok {
-		p.callSum[raKey][mkey]++
+func (p *processorImp) updateCallMetrics(resourceAttrKey metricKey, mkey metricKey) {
+	if _, ok := p.callSum[resourceAttrKey]; ok {
+		p.callSum[resourceAttrKey][mkey]++
 	} else {
-		p.callSum[raKey] = map[metricKey]int64{mkey: 1}
+		p.callSum[resourceAttrKey] = map[metricKey]int64{mkey: 1}
 	}
 }
 
 // updateLatencyMetrics increments the histogram counts for the given metric key and bucket index.
-func (p *processorImp) updateLatencyMetrics(raKey metricKey, mKey metricKey, latency float64, index int) {
-	if _, ok := p.latencyBucketCounts[raKey]; ok {
-		if _, ok := p.latencyBucketCounts[raKey][mKey]; !ok {
-			p.latencyBucketCounts[raKey][mKey] = make([]uint64, len(p.latencyBounds))
+func (p *processorImp) updateLatencyMetrics(resourceAttrKey metricKey, mKey metricKey, latency float64, index int) {
+	if _, ok := p.latencyBucketCounts[resourceAttrKey]; ok {
+		if _, ok := p.latencyBucketCounts[resourceAttrKey][mKey]; !ok {
+			p.latencyBucketCounts[resourceAttrKey][mKey] = make([]uint64, len(p.latencyBounds))
 		}
 	} else {
-		p.latencyBucketCounts[raKey] = make(map[metricKey][]uint64)
-		p.latencyBucketCounts[raKey][mKey] = make([]uint64, len(p.latencyBounds))
+		p.latencyBucketCounts[resourceAttrKey] = make(map[metricKey][]uint64)
+		p.latencyBucketCounts[resourceAttrKey][mKey] = make([]uint64, len(p.latencyBounds))
 	}
 
-	p.latencyBucketCounts[raKey][mKey][index]++
+	p.latencyBucketCounts[resourceAttrKey][mKey][index]++
 
-	if _, ok := p.latencySum[raKey]; ok {
-		p.latencySum[raKey][mKey] += latency
+	if _, ok := p.latencySum[resourceAttrKey]; ok {
+		p.latencySum[resourceAttrKey][mKey] += latency
 	} else {
-		p.latencySum[raKey] = map[metricKey]float64{mKey: latency}
+		p.latencySum[resourceAttrKey] = map[metricKey]float64{mKey: latency}
 	}
 
-	if _, ok := p.latencyCount[raKey]; ok {
-		p.latencyCount[raKey][mKey]++
+	if _, ok := p.latencyCount[resourceAttrKey]; ok {
+		p.latencyCount[resourceAttrKey][mKey]++
 	} else {
-		p.latencyCount[raKey] = map[metricKey]uint64{mKey: 1}
+		p.latencyCount[resourceAttrKey] = map[metricKey]uint64{mKey: 1}
 	}
 }
 
