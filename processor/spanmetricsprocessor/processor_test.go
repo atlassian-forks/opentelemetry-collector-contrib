@@ -313,7 +313,7 @@ func TestMetricKeyCache(t *testing.T) {
 	// Validate
 	require.NoError(t, err)
 
-	origKeyCache := make(map[metricKey]dimKV)
+	origKeyCache := make(map[metricKey]kvPairs)
 	for k, v := range p.metricKeyToDimensions {
 		origKeyCache[k] = v
 	}
@@ -350,10 +350,10 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 		nextConsumer:    tcon,
 
 		startTime:           time.Now(),
-		callSum:             make(map[metricKey]map[metricKey]int64),
-		latencySum:          make(map[metricKey]map[metricKey]float64),
-		latencyCount:        make(map[metricKey]map[metricKey]uint64),
-		latencyBucketCounts: make(map[metricKey]map[metricKey][]uint64),
+		callSum:             make(map[resourceKey]map[metricKey]int64),
+		latencySum:          make(map[resourceKey]map[metricKey]float64),
+		latencyCount:        make(map[resourceKey]map[metricKey]uint64),
+		latencyBucketCounts: make(map[resourceKey]map[metricKey][]uint64),
 		latencyBounds:       defaultLatencyHistogramBucketsMs,
 		dimensions: []Dimension{
 			// Set nil defaults to force a lookup for the attribute in the span.
@@ -375,8 +375,9 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			{notInSpanResourceAttr0, &localDefaultNotInSpanAttrVal},
 			{notInSpanResourceAttr1, nil},
 		},
-		resourceAttrList:      make(map[metricKey]bool),
-		metricKeyToDimensions: make(map[metricKey]dimKV),
+		resourceAttrList:        make(map[resourceKey]bool),
+		metricKeyToDimensions:   make(map[metricKey]kvPairs),
+		resourceKeyToDimensions: make(map[resourceKey]kvPairs),
 	}
 }
 
