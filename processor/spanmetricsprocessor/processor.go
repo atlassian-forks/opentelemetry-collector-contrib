@@ -34,11 +34,12 @@ import (
 )
 
 const (
-	serviceNameKey     = conventions.AttributeServiceName
-	operationKey       = "operation" // is there a constant we can refer to?
-	spanKindKey        = tracetranslator.TagSpanKind
-	statusCodeKey      = tracetranslator.TagStatusCode
-	metricKeySeparator = string(byte(0))
+	serviceNameKey             = conventions.AttributeServiceName
+	instrumentationLibraryName = "spanmetricsprocessor"
+	operationKey               = "operation" // is there a constant we can refer to?
+	spanKindKey                = tracetranslator.TagSpanKind
+	statusCodeKey              = tracetranslator.TagStatusCode
+	metricKeySeparator         = string(byte(0))
 )
 
 var (
@@ -258,7 +259,7 @@ func (p *processorImp) buildMetrics() *pdata.Metrics {
 		}
 
 		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
-		ilm.InstrumentationLibrary().SetName("spanmetricsprocessor")
+		ilm.InstrumentationLibrary().SetName(instrumentationLibraryName)
 
 		// build metrics per resource
 		p.collectCallMetrics(ilm, resourceAttrKey)

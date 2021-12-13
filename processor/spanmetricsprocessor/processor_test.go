@@ -397,7 +397,7 @@ func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
 
 	ilm := rm.At(0).InstrumentationLibraryMetrics()
 	require.Equal(t, 1, ilm.Len())
-	assert.Equal(t, "spanmetricsprocessor", ilm.At(0).InstrumentationLibrary().Name())
+	assert.Equal(t, instrumentationLibraryName, ilm.At(0).InstrumentationLibrary().Name())
 
 	m := ilm.At(0).Metrics()
 	require.Equal(t, 4, m.Len())
@@ -406,7 +406,7 @@ func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
 
 	ilm1 := rm.At(1).InstrumentationLibraryMetrics()
 	require.Equal(t, 1, ilm1.Len())
-	assert.Equal(t, "spanmetricsprocessor", ilm1.At(0).InstrumentationLibrary().Name())
+	assert.Equal(t, instrumentationLibraryName, ilm1.At(0).InstrumentationLibrary().Name())
 
 	m1 := ilm1.At(0).Metrics()
 	require.Equal(t, 2, m1.Len())
