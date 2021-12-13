@@ -344,7 +344,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
-	mKey := buildMetricKey(span, p.dimensions)
+	mKey := p.buildMetricKey(span)
 	resourceAttrKey := p.buildResourceAttrKey(serviceName, resourceAttr)
 
 	p.lock.Lock()
@@ -434,7 +434,7 @@ func concatDimensionValue(metricKeyBuilder *strings.Builder, value string) {
 // buildMetricKey builds the metric key from the service name and span metadata such as operation, kind, status_code and
 // any additional dimensions the user has configured.
 // The metric key is a simple concatenation of dimension values.
-func buildMetricKey(span pdata.Span, optionalDims []Dimension) metricKey {
+func (p *processorImp) buildMetricKey(span pdata.Span) metricKey {
 	var metricKeyBuilder strings.Builder
 	concatDimensionValue(&metricKeyBuilder, span.Name())
 	concatDimensionValue(&metricKeyBuilder, span.Kind().String())
@@ -442,7 +442,7 @@ func buildMetricKey(span pdata.Span, optionalDims []Dimension) metricKey {
 
 	spanAttr := span.Attributes()
 	var value string
-	for _, d := range optionalDims {
+	for _, d := range p.dimensions {
 		// Set the default if configured, otherwise this metric will have no value set for the dimension.
 		if d.Default != nil {
 			value = *d.Default

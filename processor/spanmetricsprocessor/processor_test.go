@@ -590,13 +590,24 @@ func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExpo
 }
 
 func TestBuildKey(t *testing.T) {
+	// Prepare
+	factory := NewFactory()
+	cfg := factory.CreateDefaultConfig().(*Config)
+
+	// Test
+	next := new(consumertest.TracesSink)
+	p, err := newProcessor(zap.NewNop(), cfg, next)
+
+	// Verify
+	assert.NoError(t, err)
+
 	span0 := pdata.NewSpan()
 	span0.SetName("c")
-	k0 := buildMetricKey(span0, nil)
+	k0 := p.buildMetricKey(span0)
 
 	span1 := pdata.NewSpan()
 	span1.SetName("bc")
-	k1 := buildMetricKey(span1, nil)
+	k1 := p.buildMetricKey(span1)
 
 	assert.NotEqual(t, k0, k1)
 }
