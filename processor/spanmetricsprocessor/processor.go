@@ -367,12 +367,14 @@ func (p *processorImp) updateCallMetrics(resourceAttrKey resourceKey, mkey metri
 
 // updateLatencyMetrics increments the histogram counts for the given metric key and bucket index.
 func (p *processorImp) updateLatencyMetrics(resourceAttrKey resourceKey, mKey metricKey, latency float64, index int) {
-	if _, ok := p.latencyBucketCounts[resourceAttrKey]; ok {
-		if _, ok := p.latencyBucketCounts[resourceAttrKey][mKey]; !ok {
-			p.latencyBucketCounts[resourceAttrKey][mKey] = make([]uint64, len(p.latencyBounds))
-		}
-	} else {
+	_, ok := p.latencyBucketCounts[resourceAttrKey]
+
+	if !ok {
 		p.latencyBucketCounts[resourceAttrKey] = make(map[metricKey][]uint64)
+		p.latencyBucketCounts[resourceAttrKey][mKey] = make([]uint64, len(p.latencyBounds))
+	}
+
+	if _, ok = p.latencyBucketCounts[resourceAttrKey][mKey]; !ok {
 		p.latencyBucketCounts[resourceAttrKey][mKey] = make([]uint64, len(p.latencyBounds))
 	}
 
