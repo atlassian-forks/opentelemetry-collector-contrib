@@ -38,7 +38,7 @@ func TestLoadConfig(t *testing.T) {
 		configFile                  string
 		wantMetricsExporter         string
 		wantLatencyHistogramBuckets []time.Duration
-		wantDimensions              []Dimension
+		wantDimensions              []KeyValuePair
 	}{
 		{configFile: "config-2-pipelines.yaml", wantMetricsExporter: "prometheus"},
 		{configFile: "config-3-pipelines.yaml", wantMetricsExporter: "otlp/spanmetrics"},
@@ -52,7 +52,7 @@ func TestLoadConfig(t *testing.T) {
 				100 * time.Millisecond,
 				250 * time.Millisecond,
 			},
-			wantDimensions: []Dimension{
+			wantDimensions: []KeyValuePair{
 				{"http.method", &defaultMethod},
 				{"http.status_code", nil},
 			},
