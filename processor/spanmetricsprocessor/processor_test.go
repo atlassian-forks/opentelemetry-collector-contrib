@@ -357,7 +357,7 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 		latencyCount:        make(map[resourceKey]map[metricKey]uint64),
 		latencyBucketCounts: make(map[resourceKey]map[metricKey][]uint64),
 		latencyBounds:       defaultLatencyHistogramBucketsMs,
-		dimensions: []KeyValuePair{
+		dimensions: []Dimension{
 			// Set nil defaults to force a lookup for the attribute in the span.
 			{stringAttrName, nil},
 			{intAttrName, nil},
@@ -371,7 +371,7 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			// Leave the default value unset to test that this dimension should not be added to the metric.
 			{notInSpanAttrName1, nil},
 		},
-		resourceAttributes: []KeyValuePair{
+		resourceAttributes: []Dimension{
 			{resourceAttr1, nil},
 			{resourceAttr2, nil},
 			{notInSpanResourceAttr0, &localDefaultNotInSpanAttrVal},
@@ -606,7 +606,7 @@ func TestProcessorDuplicateDimensions(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig().(*Config)
 	// Duplicate dimension with reserved label after sanitization.
-	cfg.Dimensions = []KeyValuePair{
+	cfg.Dimensions = []Dimension{
 		{Name: "status_code"},
 	}
 
@@ -622,7 +622,7 @@ func TestProcessorDuplicateResourceAttributes(t *testing.T) {
 	factory := NewFactory()
 	cfg := factory.CreateDefaultConfig().(*Config)
 	// Duplicate dimension with reserved label after sanitization.
-	cfg.ResourceAttributes = []KeyValuePair{
+	cfg.ResourceAttributes = []Dimension{
 		{Name: "service.name"},
 	}
 
@@ -636,37 +636,37 @@ func TestProcessorDuplicateResourceAttributes(t *testing.T) {
 func TestValidateDimensions(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
-		dimensions  []KeyValuePair
+		dimensions  []Dimension
 		expectedErr string
 	}{
 		{
 			name:       "no additional dimensions",
-			dimensions: []KeyValuePair{},
+			dimensions: []Dimension{},
 		},
 		{
 			name: "no duplicate dimensions",
-			dimensions: []KeyValuePair{
+			dimensions: []Dimension{
 				{Name: "http.service_name"},
 				{Name: "http.status_code"},
 			},
 		},
 		{
 			name: "duplicate dimension with reserved labels",
-			dimensions: []KeyValuePair{
+			dimensions: []Dimension{
 				{Name: "service.name"},
 			},
 			expectedErr: "duplicate dimension name service.name",
 		},
 		{
 			name: "duplicate dimension with reserved labels after sanitization",
-			dimensions: []KeyValuePair{
+			dimensions: []Dimension{
 				{Name: "service_name"},
 			},
 			expectedErr: "duplicate dimension name service_name",
 		},
 		{
 			name: "duplicate additional dimensions",
-			dimensions: []KeyValuePair{
+			dimensions: []Dimension{
 				{Name: "service_name"},
 				{Name: "service_name"},
 			},
@@ -674,7 +674,7 @@ func TestValidateDimensions(t *testing.T) {
 		},
 		{
 			name: "duplicate additional dimensions after sanitization",
-			dimensions: []KeyValuePair{
+			dimensions: []Dimension{
 				{Name: "http.status_code"},
 				{Name: "http!status_code"},
 			},
@@ -682,7 +682,7 @@ func TestValidateDimensions(t *testing.T) {
 		},
 		{
 			name: "we skip the case if the dimension name is the same after sanitization",
-			dimensions: []KeyValuePair{
+			dimensions: []Dimension{
 				{Name: "http_status_code"},
 			},
 		},

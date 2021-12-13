@@ -65,10 +65,10 @@ type processorImp struct {
 	nextConsumer    consumer.Traces
 
 	// Additional dimensions to add to metrics.
-	dimensions []KeyValuePair
+	dimensions []Dimension
 
 	// Additional resourceAttributes to add to metrics.
-	resourceAttributes []KeyValuePair
+	resourceAttributes []Dimension
 
 	// The starting time of the data points.
 	startTime time.Time
@@ -143,7 +143,7 @@ func mapDurationsToMillis(vs []time.Duration, f func(duration time.Duration) flo
 
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions. Considering
 // the usage of Prometheus related exporters, we also validate the dimensions after sanitization.
-func validateDimensions(dimensions []KeyValuePair, defaults []string) error {
+func validateDimensions(dimensions []Dimension, defaults []string) error {
 	labelNames := make(map[string]struct{})
 	for _, key := range defaults {
 		labelNames[key] = struct{}{}
@@ -391,7 +391,7 @@ func (p *processorImp) updateLatencyMetrics(resourceAttrKey resourceKey, mKey me
 	}
 }
 
-func buildDimensionKVs(span pdata.Span, optionalDims []KeyValuePair) kvPairs {
+func buildDimensionKVs(span pdata.Span, optionalDims []Dimension) kvPairs {
 	dims := make(kvPairs)
 	dims[operationKey] = span.Name()
 	dims[spanKindKey] = span.Kind().String()
@@ -408,7 +408,7 @@ func buildDimensionKVs(span pdata.Span, optionalDims []KeyValuePair) kvPairs {
 	return dims
 }
 
-func extractResourceAttrsByKeys(serviceName string, keys []KeyValuePair, resourceAttrs pdata.AttributeMap) kvPairs {
+func extractResourceAttrsByKeys(serviceName string, keys []Dimension, resourceAttrs pdata.AttributeMap) kvPairs {
 	dims := make(kvPairs)
 	dims[serviceNameKey] = serviceName
 	for _, ra := range keys {
@@ -434,7 +434,7 @@ func concatDimensionValue(metricKeyBuilder *strings.Builder, value string) {
 // buildMetricKey builds the metric key from the service name and span metadata such as operation, kind, status_code and
 // any additional dimensions the user has configured.
 // The metric key is a simple concatenation of dimension values.
-func buildMetricKey(span pdata.Span, optionalDims []KeyValuePair) metricKey {
+func buildMetricKey(span pdata.Span, optionalDims []Dimension) metricKey {
 	var metricKeyBuilder strings.Builder
 	concatDimensionValue(&metricKeyBuilder, span.Name())
 	concatDimensionValue(&metricKeyBuilder, span.Kind().String())
