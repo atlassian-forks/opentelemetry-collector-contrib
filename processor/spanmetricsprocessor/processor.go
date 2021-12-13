@@ -345,7 +345,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
 	mKey := buildMetricKey(span, p.dimensions)
-	resourceAttrKey := buildResourceAttrKey(serviceName, p.resourceAttributes, resourceAttr)
+	resourceAttrKey := p.buildResourceAttrKey(serviceName, resourceAttr)
 
 	p.lock.Lock()
 	p.resourceAttrList[resourceAttrKey] = true
@@ -457,12 +457,12 @@ func buildMetricKey(span pdata.Span, optionalDims []KeyValuePair) metricKey {
 	return k
 }
 
-func buildResourceAttrKey(serviceName string, optionalResourceAttrs []KeyValuePair, resourceAttr pdata.AttributeMap) resourceKey {
+func (p *processorImp) buildResourceAttrKey(serviceName string, resourceAttr pdata.AttributeMap) resourceKey {
 	var resourceKeyBuilder strings.Builder
 	concatDimensionValue(&resourceKeyBuilder, serviceName)
 
 	var value string
-	for _, ra := range optionalResourceAttrs {
+	for _, ra := range p.resourceAttributes {
 		// Set the default if configured, otherwise this metric will have no value set for the resource attribute.
 		if ra.Default != nil {
 			value = *ra.Default
