@@ -784,6 +784,7 @@ func initSpan(span span, s pdata.Span) {
 	s.Attributes().Insert(mapAttrName, pdata.NewAttributeValueMap())
 	s.Attributes().Insert(arrayAttrName, pdata.NewAttributeValueArray())
 	s.SetTraceID(pdata.NewTraceID([16]byte{byte(42)}))
+	s.SetSpanID(pdata.NewSpanID([8]byte{byte(71)}))
 }
 
 func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExporter, component.TracesExporter) {
@@ -1073,23 +1074,27 @@ func TestSetLatencyExemplars(t *testing.T) {
 	// ----- conditions -------------------------------------------------------
 	traces := buildSampleTrace()
 	traceID := traces.ResourceSpans().At(0).InstrumentationLibrarySpans().At(0).Spans().At(0).TraceID()
+	spanID := traces.ResourceSpans().At(0).InstrumentationLibrarySpans().At(0).Spans().At(0).SpanID()
 	exemplarSlice := pdata.NewExemplarSlice()
 	timestamp := pdata.NewTimestampFromTime(time.Now())
 	value := float64(42)
 
-	ed := []exemplarData{{traceID: traceID, value: value}}
+	ed := []exemplarData{{traceID: traceID, spanID: spanID, value: value}}
 
 	// ----- call -------------------------------------------------------------
 	setLatencyExemplars(ed, timestamp, exemplarSlice)
 
 	// ----- verify -----------------------------------------------------------
+	require.NotEmpty(t, exemplarSlice)
 	traceIDValue, exist := exemplarSlice.At(0).FilteredAttributes().Get(traceIDKey)
+	require.True(t, exist)
+	require.Equal(t, traceIDValue.AsString(), traceID.HexString())
 
-	assert.NotEmpty(t, exemplarSlice)
-	assert.True(t, exist)
-	assert.Equal(t, traceIDValue.AsString(), traceID.HexString())
-	assert.Equal(t, exemplarSlice.At(0).Timestamp(), timestamp)
-	assert.Equal(t, exemplarSlice.At(0).DoubleVal(), value)
+	spanIDValue, exist := exemplarSlice.At(0).FilteredAttributes().Get(spanIDKey)
+	require.True(t, exist)
+	require.Equal(t, spanIDValue.AsString(), spanID.HexString())
+	require.Equal(t, exemplarSlice.At(0).Timestamp(), timestamp)
+	require.Equal(t, exemplarSlice.At(0).DoubleVal(), value)
 }
 
 func TestProcessorUpdateLatencyExemplars(t *testing.T) {

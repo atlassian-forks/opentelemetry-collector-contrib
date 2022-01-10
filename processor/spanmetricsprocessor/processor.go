@@ -43,6 +43,7 @@ const (
 	spanKindKey                = "span.kind"   // OpenTelemetry non-standard constant.
 	statusCodeKey              = "status.code" // OpenTelemetry non-standard constant.
 	traceIDKey                 = "trace_id"
+	spanIDKey                  = "span_id"
 
 	defaultDimensionsCacheSize         = 1000
 	defaultResourceAttributesCacheSize = 1000
@@ -59,6 +60,7 @@ var (
 
 type exemplarData struct {
 	traceID pdata.TraceID
+	spanID pdata.SpanID
 	value   float64
 }
 
@@ -88,6 +90,7 @@ type processorImp struct {
 
 	// Call & Error counts.
 	callSum map[resourceKey]map[metricKey]int64
+	callExemplarsData map[resourceKey]map[metricKey][]exemplarData
 
 	// Latency histogram.
 	latencyCount         map[resourceKey]map[metricKey]uint64
@@ -139,6 +142,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		config:                  *pConfig,
 		startTime:               time.Now(),
 		callSum:                 make(map[resourceKey]map[metricKey]int64),
+		callExemplarsData:	     make(map[resourceKey]map[metricKey][]exemplarData),
 		latencyBounds:           bounds,
 		latencySum:              make(map[resourceKey]map[metricKey]float64),
 		latencyCount:            make(map[resourceKey]map[metricKey]uint64),
@@ -674,16 +678,18 @@ func setLatencyExemplars(exemplarsData []exemplarData, timestamp pdata.Timestamp
 	for _, ed := range exemplarsData {
 		value := ed.value
 		traceID := ed.traceID
+		spanID := ed.spanID
 
 		exemplar := es.AppendEmpty()
 
-		if traceID.IsEmpty() {
+		if traceID.IsEmpty() || spanID.IsEmpty(){
 			continue
 		}
 
 		exemplar.SetDoubleVal(value)
 		exemplar.SetTimestamp(timestamp)
 		exemplar.FilteredAttributes().Insert(traceIDKey, pdata.NewAttributeValueString(traceID.HexString()))
+		exemplar.FilteredAttributes().Insert(spanIDKey, pdata.NewAttributeValueString(spanID.HexString()))
 	}
 
 	es.CopyTo(exemplars)
