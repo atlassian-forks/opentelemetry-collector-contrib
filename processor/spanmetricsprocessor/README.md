@@ -48,6 +48,9 @@ The following settings can be optionally configured:
   - Default: `[2ms, 4ms, 6ms, 8ms, 10ms, 50ms, 100ms, 200ms, 400ms, 800ms, 1s, 1400ms, 2s, 5s, 10s, 15s]`
 - `dimensions`: the list of dimensions to add together with the default dimensions defined above. Each additional dimension is defined with a `name` which is looked up in the span's collection of attributes. If the `name`d attribute is missing in the span, the optional provided `default` is used. If no `default` is provided, this dimension will be **omitted** from the metric.
 
+- `attach_span_and_trace_id` attaches span id and trace id as attributes on metrics generated from spans if set to `true`.
+  - Default: `false`
+
 ## Examples
 
 The following is a simple example usage of the spanmetrics processor.
@@ -79,6 +82,7 @@ processors:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
     latency_histogram_buckets: [2ms, 6ms, 10ms, 100ms, 250ms]
+    attach_span_and_trace_id: true
     dimensions:
       - name: http.method
         default: GET

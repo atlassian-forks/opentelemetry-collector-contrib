@@ -72,6 +72,8 @@ type span struct {
 	operation  string
 	kind       pdata.SpanKind
 	statusCode pdata.StatusCode
+	spanID     pdata.SpanID
+	traceID    pdata.TraceID
 }
 
 func TestProcessorStart(t *testing.T) {
@@ -178,7 +180,7 @@ func TestProcessorConsumeTracesErrors(t *testing.T) {
 			tcon := &mocks.TracesConsumer{}
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(tc.consumeTracesErr)
 
-			p := newProcessorImp(mexp, tcon, nil)
+			p := newProcessorImp(mexp, tcon, nil, false)
 
 			traces := buildSampleTrace()
 
@@ -197,15 +199,58 @@ func TestProcessorConsumeTraces(t *testing.T) {
 	mexp := &mocks.MetricsExporter{}
 	tcon := &mocks.TracesConsumer{}
 
+	expectedSpanAndTraceIDs := make(map[string]int)
+	defaultNullValue := "defaultNullValue"
+
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, false)
+
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-		return verifyConsumeMetricsInput(input, t)
+		return verifyConsumeMetricsInput(input, t, p.attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	})).Return(nil)
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
-	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue)
+	traces := buildSampleTrace()
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, traces)
+
+	// Verify
+	assert.NoError(t, err)
+}
+
+func TestProcessorConsumeTracesWithSpanAndTraceID(t *testing.T) {
+	// Prepare
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
 
 	traces := buildSampleTrace()
+
+	expectedSpanAndTraceIDs := make(map[string]int)
+	for i := 0; i < traces.ResourceSpans().Len(); i++ {
+		rspans := traces.ResourceSpans().At(i)
+		ilsSlice := rspans.InstrumentationLibrarySpans()
+		for j := 0; j < ilsSlice.Len(); j++ {
+			ils := ilsSlice.At(j)
+			spans := ils.Spans()
+			for k := 0; k < spans.Len(); k++ {
+				span := spans.At(k)
+				// we expect to see each trace id and span id twice, once for metric name "calls_total" and once for "latency"
+				expectedSpanAndTraceIDs[span.SpanID().HexString()] += 2
+				expectedSpanAndTraceIDs[span.TraceID().HexString()] += 2
+			}
+		}
+	}
+
+	defaultNullValue := "defaultNullValue"
+
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, true)
+
+	// TODO: CLAIRE
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		return verifyConsumeMetricsInput(input, t, p.attachSpanAndTraceID, expectedSpanAndTraceIDs)
+	})).Return(nil)
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	// Test
 	ctx := metadata.NewIncomingContext(context.Background(), nil)
@@ -224,7 +269,7 @@ func TestMetricKeyCache(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, false)
 
 	traces := buildSampleTrace()
 
@@ -234,7 +279,6 @@ func TestMetricKeyCache(t *testing.T) {
 
 	// Validate
 	require.NoError(t, err)
-
 	origKeyCache := make(map[metricKey]dimKV)
 	for k, v := range p.metricKeyToDimensions {
 		origKeyCache[k] = v
@@ -253,7 +297,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, false)
 
 	traces := buildSampleTrace()
 
@@ -264,7 +308,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	}
 }
 
-func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string) *processorImp {
+func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string, attachSpanAndTraceID bool) *processorImp {
 	defaultNotInSpanAttrVal := "defaultNotInSpanAttrVal"
 	return &processorImp{
 		logger:          zap.NewNop(),
@@ -292,12 +336,13 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			{notInSpanAttrName1, nil},
 		},
 		metricKeyToDimensions: make(map[metricKey]dimKV),
+		attachSpanAndTraceID:  attachSpanAndTraceID,
 	}
 }
 
 // verifyConsumeMetricsInput verifies the input of the ConsumeMetrics call from this processor.
 // This is the best point to verify the computed metrics from spans are as expected.
-func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
+func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
 	require.Equal(t, 6, input.MetricCount(),
 		"Should be 3 for each of call count and latency. Each group of 3 metrics is made of: "+
 			"service-a (server kind) -> service-a (client kind) -> service-b (service kind)",
@@ -331,7 +376,7 @@ func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
 		assert.NotZero(t, dp.StartTimestamp(), "StartTimestamp should be set")
 		assert.NotZero(t, dp.Timestamp(), "Timestamp should be set")
 
-		verifyMetricLabels(dp, t, seenMetricIDs)
+		verifyMetricLabels(dp, t, seenMetricIDs, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
 
 	seenMetricIDs = make(map[metricID]bool)
@@ -366,12 +411,14 @@ func verifyConsumeMetricsInput(input pdata.Metrics, t *testing.T) bool {
 			}
 			assert.Equal(t, wantBucketCount, dp.BucketCounts()[bi])
 		}
-		verifyMetricLabels(dp, t, seenMetricIDs)
+		verifyMetricLabels(dp, t, seenMetricIDs, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
+
+	assert.Empty(t, expectedSpanAndTraceIDs, "Did not see all expected span and trace IDs in metric. Missing: ", expectedSpanAndTraceIDs)
 	return true
 }
 
-func verifyMetricLabels(dp metricDataPoint, t *testing.T, seenMetricIDs map[metricID]bool) {
+func verifyMetricLabels(dp metricDataPoint, t *testing.T, seenMetricIDs map[metricID]bool, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) {
 	mID := metricID{}
 	wantDimensions := map[string]string{
 		stringAttrName:     "stringAttrValue",
@@ -395,6 +442,17 @@ func verifyMetricLabels(dp metricDataPoint, t *testing.T, seenMetricIDs map[metr
 			mID.statusCode = v
 		case notInSpanAttrName1:
 			assert.Fail(t, notInSpanAttrName1+" should not be in this metric")
+		case spanIDKey, traceIDKey:
+			if !attachSpanAndTraceID {
+				assert.Fail(t, v+" should not be in this metric. Span ID and Trace ID should only be attached when configuration option is set to.")
+			}
+			if _, exists := expectedSpanAndTraceIDs[v]; !exists {
+				assert.Fail(t, v+" should not be in this metric.")
+			}
+			expectedSpanAndTraceIDs[v]--
+			if expectedSpanAndTraceIDs[v] == 0 {
+				delete(expectedSpanAndTraceIDs, v)
+			}
 		default:
 			assert.Equal(t, wantDimensions[k], v)
 			delete(wantDimensions, k)
@@ -423,11 +481,15 @@ func buildSampleTrace() pdata.Traces {
 					operation:  "/ping",
 					kind:       pdata.SpanKindServer,
 					statusCode: pdata.StatusCodeOk,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
 				},
 				{
 					operation:  "/ping",
 					kind:       pdata.SpanKindClient,
 					statusCode: pdata.StatusCodeOk,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
 				},
 			},
 		}, traces.ResourceSpans().AppendEmpty())
@@ -439,6 +501,8 @@ func buildSampleTrace() pdata.Traces {
 					operation:  "/ping",
 					kind:       pdata.SpanKindServer,
 					statusCode: pdata.StatusCodeError,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
 				},
 			},
 		}, traces.ResourceSpans().AppendEmpty())
@@ -472,6 +536,8 @@ func initSpan(span span, s pdata.Span) {
 	s.Attributes().InsertNull(nullAttrName)
 	s.Attributes().Insert(mapAttrName, pdata.NewAttributeValueMap())
 	s.Attributes().Insert(arrayAttrName, pdata.NewAttributeValueArray())
+	s.SetSpanID(span.spanID)
+	s.SetTraceID(span.traceID)
 }
 
 func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExporter, component.TracesExporter) {
@@ -493,13 +559,27 @@ func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExpo
 func TestBuildKey(t *testing.T) {
 	span0 := pdata.NewSpan()
 	span0.SetName("c")
-	k0 := buildKey("ab", span0, nil)
+	k0 := buildKey("ab", span0, nil, false)
 
 	span1 := pdata.NewSpan()
 	span1.SetName("bc")
-	k1 := buildKey("a", span1, nil)
+	k1 := buildKey("a", span1, nil, false)
 
 	assert.NotEqual(t, k0, k1)
+
+	span2 := pdata.NewSpan()
+	span2.SetName("cd")
+	span2.SetSpanID(pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}))
+	span2.SetTraceID(pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}))
+	k2 := buildKey("a", span2, nil, true)
+
+	span3 := pdata.NewSpan()
+	span3.SetName("cd")
+	span3.SetSpanID(pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}))
+	span3.SetTraceID(pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}))
+	k3 := buildKey("a", span3, nil, false)
+
+	assert.NotEqual(t, k2, k3)
 }
 
 func TestProcessorDuplicateDimensions(t *testing.T) {

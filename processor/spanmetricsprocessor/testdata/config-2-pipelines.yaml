@@ -27,6 +27,7 @@ processors:
   batch:
   spanmetrics:
     metrics_exporter: prometheus
+    attach_span_and_trace_id: true
 
 service:
   pipelines:

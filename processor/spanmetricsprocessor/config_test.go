@@ -39,9 +39,10 @@ func TestLoadConfig(t *testing.T) {
 		wantMetricsExporter         string
 		wantLatencyHistogramBuckets []time.Duration
 		wantDimensions              []Dimension
+		wantAttachSpanAndTraceID    bool
 	}{
-		{configFile: "config-2-pipelines.yaml", wantMetricsExporter: "prometheus"},
-		{configFile: "config-3-pipelines.yaml", wantMetricsExporter: "otlp/spanmetrics"},
+		{configFile: "config-2-pipelines.yaml", wantMetricsExporter: "prometheus", wantAttachSpanAndTraceID: true},
+		{configFile: "config-3-pipelines.yaml", wantMetricsExporter: "otlp/spanmetrics", wantAttachSpanAndTraceID: false},
 		{
 			configFile:          "config-full.yaml",
 			wantMetricsExporter: "otlp/spanmetrics",
@@ -56,6 +57,7 @@ func TestLoadConfig(t *testing.T) {
 				{"http.method", &defaultMethod},
 				{"http.status_code", nil},
 			},
+			wantAttachSpanAndTraceID: false,
 		},
 	}
 	for _, tc := range testcases {
@@ -86,6 +88,7 @@ func TestLoadConfig(t *testing.T) {
 					MetricsExporter:         tc.wantMetricsExporter,
 					LatencyHistogramBuckets: tc.wantLatencyHistogramBuckets,
 					Dimensions:              tc.wantDimensions,
+					AttachSpanAndTraceID:    tc.wantAttachSpanAndTraceID,
 				},
 				cfg.Processors[config.NewID(typeStr)],
 			)

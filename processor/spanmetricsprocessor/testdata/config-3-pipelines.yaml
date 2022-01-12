@@ -39,6 +39,7 @@ processors:
   batch:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
+    attach_span_and_trace_id: false
 
 service:
   pipelines:

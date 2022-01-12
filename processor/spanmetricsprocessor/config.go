@@ -45,4 +45,8 @@ type Config struct {
 	// The dimensions will be fetched from the span's attributes. Examples of some conventionally used attributes:
 	// https://github.com/open-telemetry/opentelemetry-collector/blob/main/translator/conventions/opentelemetry.go.
 	Dimensions []Dimension `mapstructure:"dimensions"`
+
+	// AttachSpanAndTraceID attaches span id and trace id to metrics generated from spans.
+	// The default value is set to `false`.
+	AttachSpanAndTraceID bool `mapstructure:"attach_span_and_trace_id"`
 }

@@ -38,6 +38,8 @@ const (
 	operationKey       = "operation" // is there a constant we can refer to?
 	spanKindKey        = tracetranslator.TagSpanKind
 	statusCodeKey      = tracetranslator.TagStatusCode
+	traceIDKey         = "event.spanId"
+	spanIDKey          = "event.traceId"
 	metricKeySeparator = string(byte(0))
 )
 
@@ -65,6 +67,8 @@ type processorImp struct {
 
 	// Additional dimensions to add to metrics.
 	dimensions []Dimension
+
+	attachSpanAndTraceID bool
 
 	// The starting time of the data points.
 	startTime time.Time
@@ -114,6 +118,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		latencyBucketCounts:   make(map[metricKey][]uint64),
 		nextConsumer:          nextConsumer,
 		dimensions:            pConfig.Dimensions,
+		attachSpanAndTraceID:  pConfig.AttachSpanAndTraceID,
 		metricKeyToDimensions: make(map[metricKey]dimKV),
 	}, nil
 }
@@ -308,7 +313,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
-	key := buildKey(serviceName, span, p.dimensions)
+	key := buildKey(serviceName, span, p.dimensions, p.attachSpanAndTraceID)
 
 	p.lock.Lock()
 	p.cache(serviceName, span, key)
@@ -332,12 +337,18 @@ func (p *processorImp) updateLatencyMetrics(key metricKey, latency float64, inde
 	p.latencyBucketCounts[key][index]++
 }
 
-func buildDimensionKVs(serviceName string, span pdata.Span, optionalDims []Dimension) dimKV {
+func buildDimensionKVs(serviceName string, span pdata.Span, optionalDims []Dimension, attachSpanAndTraceID bool) dimKV {
 	dims := make(dimKV)
 	dims[serviceNameKey] = serviceName
 	dims[operationKey] = span.Name()
 	dims[spanKindKey] = span.Kind().String()
 	dims[statusCodeKey] = span.Status().Code().String()
+
+	if attachSpanAndTraceID {
+		dims[spanIDKey] = span.SpanID().HexString()
+		dims[traceIDKey] = span.TraceID().HexString()
+	}
+
 	spanAttr := span.Attributes()
 	for _, d := range optionalDims {
 		if attr, ok := spanAttr.Get(d.Name); ok {
@@ -362,12 +373,17 @@ func concatDimensionValue(metricKeyBuilder *strings.Builder, value string, prefi
 // buildKey builds the metric key from the service name and span metadata such as operation, kind, status_code and
 // any additional dimensions the user has configured.
 // The metric key is a simple concatenation of dimension values.
-func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension) metricKey {
+func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension, attachSpanAndTraceID bool) metricKey {
 	var metricKeyBuilder strings.Builder
 	concatDimensionValue(&metricKeyBuilder, serviceName, false)
 	concatDimensionValue(&metricKeyBuilder, span.Name(), true)
 	concatDimensionValue(&metricKeyBuilder, span.Kind().String(), true)
 	concatDimensionValue(&metricKeyBuilder, span.Status().Code().String(), true)
+
+	if attachSpanAndTraceID {
+		concatDimensionValue(&metricKeyBuilder, span.SpanID().HexString(), true)
+		concatDimensionValue(&metricKeyBuilder, span.TraceID().HexString(), true)
+	}
 
 	spanAttr := span.Attributes()
 	var value string
@@ -391,7 +407,7 @@ func buildKey(serviceName string, span pdata.Span, optionalDims []Dimension) met
 //   LabelsMap().InitFromMap(p.metricKeyToDimensions[key])
 func (p *processorImp) cache(serviceName string, span pdata.Span, k metricKey) {
 	if _, ok := p.metricKeyToDimensions[k]; !ok {
-		p.metricKeyToDimensions[k] = buildDimensionKVs(serviceName, span, p.dimensions)
+		p.metricKeyToDimensions[k] = buildDimensionKVs(serviceName, span, p.dimensions, p.attachSpanAndTraceID)
 	}
 }
 
