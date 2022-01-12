@@ -227,6 +227,7 @@ func TestProcessorConsumeTracesWithSpanAndTraceID(t *testing.T) {
 	traces := buildSampleTrace()
 
 	expectedSpanAndTraceIDs := make(map[string]int)
+	// grab all span ids and trace ids which we should expect to see in metrics
 	for i := 0; i < traces.ResourceSpans().Len(); i++ {
 		rspans := traces.ResourceSpans().At(i)
 		ilsSlice := rspans.InstrumentationLibrarySpans()
@@ -246,7 +247,6 @@ func TestProcessorConsumeTracesWithSpanAndTraceID(t *testing.T) {
 
 	p := newProcessorImp(mexp, tcon, &defaultNullValue, true)
 
-	// TODO: CLAIRE
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
 		return verifyConsumeMetricsInput(input, t, p.attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	})).Return(nil)
@@ -569,17 +569,17 @@ func TestBuildKey(t *testing.T) {
 
 	span2 := pdata.NewSpan()
 	span2.SetName("cd")
-	span2.SetSpanID(pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}))
-	span2.SetTraceID(pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}))
+	spanID := pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02})
+	span2.SetSpanID(spanID)
+	traceID := pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+	span2.SetTraceID(traceID)
 	k2 := buildKey("a", span2, nil, true)
+	k3 := buildKey("a", span2, nil, false)
 
-	span3 := pdata.NewSpan()
-	span3.SetName("cd")
-	span3.SetSpanID(pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}))
-	span3.SetTraceID(pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}))
-	k3 := buildKey("a", span3, nil, false)
-
-	assert.NotEqual(t, k2, k3)
+	assert.Contains(t, k2, spanID.HexString())
+	assert.Contains(t, k2, traceID.HexString())
+	assert.NotContains(t, k3, spanID.HexString())
+	assert.NotContains(t, k3, traceID.HexString())
 }
 
 func TestProcessorDuplicateDimensions(t *testing.T) {
