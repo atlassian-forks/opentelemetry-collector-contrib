@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/config"
-	"go.opentelemetry.io/collector/model/pdata"
+	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
 const (
@@ -73,9 +73,9 @@ type Config struct {
 
 // GetAggregationTemporality converts the string value given in the config into a MetricAggregationTemporality.
 // Returns cumulative, unless delta is correctly specified.
-func (c Config) GetAggregationTemporality() pdata.MetricAggregationTemporality {
+func (c Config) GetAggregationTemporality() pdata.AggregationTemporality {
 	if c.AggregationTemporality == delta {
-		return pdata.MetricAggregationTemporalityDelta
+		return pdata.AggregationTemporalityDelta
 	}
-	return pdata.MetricAggregationTemporalityCumulative
+	return pdata.AggregationTemporalityCumulative
 }
