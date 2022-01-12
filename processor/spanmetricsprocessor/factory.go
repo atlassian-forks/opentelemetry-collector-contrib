@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package spanmetricsprocessor
+package spanmetricsprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor"
 
 import (
 	"context"
@@ -39,10 +39,13 @@ func NewFactory() component.ProcessorFactory {
 
 func createDefaultConfig() config.Processor {
 	return &Config{
-		ProcessorSettings: config.NewProcessorSettings(config.NewID(typeStr)),
+		ProcessorSettings:           config.NewProcessorSettings(config.NewComponentID(typeStr)),
+		AggregationTemporality:      "AGGREGATION_TEMPORALITY_CUMULATIVE",
+		DimensionsCacheSize:         defaultDimensionsCacheSize,
+		ResourceAttributesCacheSize: defaultResourceAttributesCacheSize,
 	}
 }
 
-func createTracesProcessor(_ context.Context, params component.ProcessorCreateParams, cfg config.Processor, nextConsumer consumer.Traces) (component.TracesProcessor, error) {
+func createTracesProcessor(_ context.Context, params component.ProcessorCreateSettings, cfg config.Processor, nextConsumer consumer.Traces) (component.TracesProcessor, error) {
 	return newProcessor(params.Logger, cfg, nextConsumer)
 }
