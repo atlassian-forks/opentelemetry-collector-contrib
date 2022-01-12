@@ -38,8 +38,8 @@ const (
 	operationKey       = "operation" // is there a constant we can refer to?
 	spanKindKey        = tracetranslator.TagSpanKind
 	statusCodeKey      = tracetranslator.TagStatusCode
-	traceIDKey         = "span.id"
-	spanIDKey          = "trace.id"
+	traceIDKey         = "trace.id"
+	spanIDKey          = "span.id"
 	metricKeySeparator = string(byte(0))
 )
 
