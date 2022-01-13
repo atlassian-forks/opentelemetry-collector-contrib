@@ -24,13 +24,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/configgrpc"
 	"go.opentelemetry.io/collector/consumer/consumertest"
+	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
-	"go.opentelemetry.io/collector/model/pdata"
-	conventions "go.opentelemetry.io/collector/model/semconv/v1.5.0"
+	"go.opentelemetry.io/collector/translator/conventions"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	"google.golang.org/grpc/metadata"
@@ -74,7 +73,7 @@ type metricID struct {
 }
 
 type metricDataPoint interface {
-	Attributes() pdata.AttributeMap
+	LabelsMap() pdata.StringMap
 }
 
 type serviceSpans struct {
@@ -117,7 +116,7 @@ func TestProcessorStart(t *testing.T) {
 			cfg := factory.CreateDefaultConfig().(*Config)
 			cfg.MetricsExporter = tc.metricsExporter
 
-			procCreationParams := componenttest.NewNopProcessorCreateSettings()
+			procCreationParams := component.ProcessorCreateParams{Logger: zap.NewNop()}
 			traceProcessor, err := factory.CreateTracesProcessor(context.Background(), procCreationParams, cfg, consumertest.NewNop())
 			require.NoError(t, err)
 
@@ -541,12 +540,12 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 
 // verifyConsumeMetricsInputCumulative expects one accumulation of metrics, and marked as cumulative
 func verifyConsumeMetricsInputCumulative(t testing.TB, input pdata.Metrics) bool {
-	return verifyConsumeMetricsInput(t, input, pdata.MetricAggregationTemporalityCumulative, 1)
+	return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityCumulative, 1)
 }
 
 // verifyConsumeMetricsInputDelta expects one accumulation of metrics, and marked as delta
 func verifyConsumeMetricsInputDelta(t testing.TB, input pdata.Metrics) bool {
-	return verifyConsumeMetricsInput(t, input, pdata.MetricAggregationTemporalityDelta, 1)
+	return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityDelta, 1)
 }
 
 // verifyMultipleCumulativeConsumptions expects the amount of accumulations as kept track of by numCumulativeConsumptions.
@@ -555,13 +554,13 @@ func verifyMultipleCumulativeConsumptions() func(t testing.TB, input pdata.Metri
 	numCumulativeConsumptions := 0
 	return func(t testing.TB, input pdata.Metrics) bool {
 		numCumulativeConsumptions++
-		return verifyConsumeMetricsInput(t, input, pdata.MetricAggregationTemporalityCumulative, numCumulativeConsumptions)
+		return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityCumulative, numCumulativeConsumptions)
 	}
 }
 
 // verifyConsumeMetricsInput verifies the input of the ConsumeMetrics call from this processor.
 // This is the best point to verify the computed metrics from spans are as expected.
-func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTemporality pdata.MetricAggregationTemporality, numCumulativeConsumptions int) bool {
+func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTemporality pdata.AggregationTemporality, numCumulativeConsumptions int) bool {
 	require.Equal(t, 6, input.MetricCount(),
 		"Should be 3 for each of call count and latency. Each group of 3 metrics is made of: "+
 			"service-a (server kind) -> service-a (client kind) -> service-b (service kind)",
@@ -607,20 +606,20 @@ func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTempor
 
 func getServiceName(m pdata.ResourceMetrics) (string, bool) {
 	if val, ok := m.Resource().Attributes().Get(serviceNameKey); ok {
-		return val.AsString(), true
+		return val.StringVal(), true
 	}
 
 	return "", false
 }
 
-func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.MetricAggregationTemporality, numCumulativeConsumptions int, numOfCallCounts int, t testing.TB) {
+func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTemporality, numCumulativeConsumptions int, numOfCallCounts int, t testing.TB) {
 	seenMetricIDs := make(map[metricID]bool)
 	mi := 0
 	// The first <numOfCallCounts> metrics are for call counts.
 	for ; mi < numOfCallCounts; mi++ {
 		assert.Equal(t, "calls_total", m.At(mi).Name())
 
-		data := m.At(mi).Sum()
+		data := m.At(mi).IntSum()
 		assert.Equal(t, expectedTemporality, data.AggregationTemporality())
 		assert.True(t, data.IsMonotonic())
 
@@ -628,7 +627,7 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.MetricAggregat
 		require.Equal(t, 1, dps.Len())
 
 		dp := dps.At(0)
-		assert.Equal(t, int64(numCumulativeConsumptions), dp.IntVal(), "There should only be one metric per Service/operation/kind combination")
+		assert.Equal(t, int64(numCumulativeConsumptions), dp.Value(), "There should only be one metric per Service/operation/kind combination")
 		assert.NotZero(t, dp.StartTimestamp(), "StartTimestamp should be set")
 		assert.NotZero(t, dp.Timestamp(), "Timestamp should be set")
 
@@ -648,7 +647,7 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.MetricAggregat
 
 		dp := dps.At(0)
 
-		if expectedTemporality == pdata.MetricAggregationTemporalityDelta {
+		if expectedTemporality == pdata.AggregationTemporalityDelta {
 			assert.Equal(t, sampleLatency, dp.Sum(), "Should be a single 11ms latency measurement")
 		} else {
 			assert.Equal(t, sampleLatency*float64(numCumulativeConsumptions), dp.Sum(), "Should be cumulative latency measurement")
@@ -669,7 +668,7 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.MetricAggregat
 		for bi := 0; bi < len(dp.BucketCounts()); bi++ {
 			wantBucketCount = 0
 			if bi == foundLatencyIndex {
-				if expectedTemporality == pdata.MetricAggregationTemporalityDelta {
+				if expectedTemporality == pdata.AggregationTemporalityDelta {
 					wantBucketCount = 1
 				} else {
 					wantBucketCount = uint64(1 * numCumulativeConsumptions)
@@ -688,20 +687,20 @@ func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metr
 		intAttrName:            pdata.NewAttributeValueInt(99),
 		doubleAttrName:         pdata.NewAttributeValueDouble(99.99),
 		boolAttrName:           pdata.NewAttributeValueBool(true),
-		nullAttrName:           pdata.NewAttributeValueEmpty(),
+		nullAttrName:           pdata.NewAttributeValueNull(),
 		arrayAttrName:          pdata.NewAttributeValueArray(),
 		mapAttrName:            pdata.NewAttributeValueMap(),
 		notInSpanAttrName0:     pdata.NewAttributeValueString(defaultNotInSpanAttrVal),
 		regionResourceAttrName: pdata.NewAttributeValueString(sampleRegion),
 	}
-	dp.Attributes().Range(func(k string, v pdata.AttributeValue) bool {
+	dp.LabelsMap().Range(func(k string, v string) bool {
 		switch k {
 		case operationKey:
-			mID.operation = v.StringVal()
+			mID.operation = v
 		case spanKindKey:
-			mID.kind = v.StringVal()
+			mID.kind = v
 		case statusCodeKey:
-			mID.statusCode = v.StringVal()
+			mID.statusCode = v
 		case notInSpanAttrName1:
 			assert.Fail(t, notInSpanAttrName1+" should not be in this metric")
 		default:
@@ -774,8 +773,8 @@ func initSpan(span span, s pdata.Span) {
 	s.SetKind(span.kind)
 	s.Status().SetCode(span.statusCode)
 	now := time.Now()
-	s.SetStartTimestamp(pdata.NewTimestampFromTime(now))
-	s.SetEndTimestamp(pdata.NewTimestampFromTime(now.Add(sampleLatencyDuration)))
+	s.SetStartTimestamp(pdata.TimestampFromTime(now))
+	s.SetEndTimestamp(pdata.TimestampFromTime(now.Add(sampleLatencyDuration)))
 	s.Attributes().InsertString(stringAttrName, "stringAttrValue")
 	s.Attributes().InsertInt(intAttrName, 99)
 	s.Attributes().InsertDouble(doubleAttrName, 99.99)
@@ -789,12 +788,12 @@ func initSpan(span span, s pdata.Span) {
 func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExporter, component.TracesExporter) {
 	otlpExpFactory := otlpexporter.NewFactory()
 	otlpConfig := &otlpexporter.Config{
-		ExporterSettings: config.NewExporterSettings(config.NewComponentID("otlp")),
+		ExporterSettings: config.NewExporterSettings(config.NewID("otlp")),
 		GRPCClientSettings: configgrpc.GRPCClientSettings{
 			Endpoint: "example.com:1234",
 		},
 	}
-	expCreationParams := componenttest.NewNopExporterCreateSettings()
+	expCreationParams :=  component.ExporterCreateParams{Logger: zap.NewNop()}
 	mexp, err := otlpExpFactory.CreateMetricsExporter(context.Background(), expCreationParams, otlpConfig)
 	require.NoError(t, err)
 	texp, err := otlpExpFactory.CreateTracesExporter(context.Background(), expCreationParams, otlpConfig)
@@ -908,9 +907,9 @@ func TestBuildKeyWithDimensions(t *testing.T) {
 			p, err := newProcessor(zap.NewNop(), cfg, next)
 			assert.NoError(t, err)
 
-			resAttr := pdata.NewAttributeMapFromMap(tc.resourceAttrMap)
+			resAttr := pdata.NewAttributeMap().InitFromMap(tc.resourceAttrMap)
 			span0 := pdata.NewSpan()
-			pdata.NewAttributeMapFromMap(tc.spanAttrMap).CopyTo(span0.Attributes())
+			pdata.NewAttributeMap().InitFromMap(tc.spanAttrMap).CopyTo(span0.Attributes())
 			span0.SetName("c")
 			k := p.buildMetricKey(span0, resAttr)
 
@@ -1074,7 +1073,7 @@ func TestSetLatencyExemplars(t *testing.T) {
 	traces := buildSampleTrace()
 	traceID := traces.ResourceSpans().At(0).InstrumentationLibrarySpans().At(0).Spans().At(0).TraceID()
 	exemplarSlice := pdata.NewExemplarSlice()
-	timestamp := pdata.NewTimestampFromTime(time.Now())
+	timestamp := pdata.TimestampFromTime(time.Now())
 	value := float64(42)
 
 	ed := []exemplarData{{traceID: traceID, value: value}}
@@ -1083,13 +1082,13 @@ func TestSetLatencyExemplars(t *testing.T) {
 	setLatencyExemplars(ed, timestamp, exemplarSlice)
 
 	// ----- verify -----------------------------------------------------------
-	traceIDValue, exist := exemplarSlice.At(0).FilteredAttributes().Get(traceIDKey)
+	traceIDValue, exist := exemplarSlice.At(0).FilteredLabels().Get(traceIDKey)
 
 	assert.NotEmpty(t, exemplarSlice)
 	assert.True(t, exist)
-	assert.Equal(t, traceIDValue.AsString(), traceID.HexString())
+	assert.Equal(t, traceIDValue, traceID.HexString())
 	assert.Equal(t, exemplarSlice.At(0).Timestamp(), timestamp)
-	assert.Equal(t, exemplarSlice.At(0).DoubleVal(), value)
+	assert.Equal(t, exemplarSlice.At(0).Value(), value)
 }
 
 func TestProcessorUpdateLatencyExemplars(t *testing.T) {
@@ -1188,7 +1187,7 @@ func TestBuildResourceAttrKey(t *testing.T) {
 			t.Parallel()
 			if got := p.buildResourceAttrKey(
 				tt.args.serviceName,
-				pdata.NewAttributeMapFromMap(tt.args.resourceAttrMap),
+				pdata.NewAttributeMap().InitFromMap(tt.args.resourceAttrMap),
 			); got != tt.want {
 				t.Errorf("buildResourceAttrKey() = %v, want %v", got, tt.want)
 			}
@@ -1276,7 +1275,7 @@ func TestBuildBuildMetricKey(t *testing.T) {
 			t.Parallel()
 			if got := p.buildMetricKey(
 				tt.args.span(),
-				pdata.NewAttributeMapFromMap(tt.args.attrMap),
+				pdata.NewAttributeMap().InitFromMap(tt.args.attrMap),
 			); got != tt.want {
 				fmt.Println(got)
 				fmt.Println(tt.want)
