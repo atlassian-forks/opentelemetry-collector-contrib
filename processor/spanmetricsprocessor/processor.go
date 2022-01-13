@@ -427,7 +427,7 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 	ilsSlice := rspans.InstrumentationLibrarySpans()
 	for j := 0; j < ilsSlice.Len(); j++ {
 		ils := ilsSlice.At(j)
-		instrLibName := ils.InstrumentationLibrary().Name()
+		instrLibName := instrLibKey(ils.InstrumentationLibrary().Name())
 		spans := ils.Spans()
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
@@ -480,10 +480,10 @@ func (p *processorImp) reset() {
 // resetAccumulatedMetrics resets the internal maps used to store created metric data. Also purge the cache for
 // metricKeyToDimensions.
 func (p *processorImp) resetAccumulatedMetrics() {
-	p.callSum = make(map[resourceKey]map[metricKey]int64)
-	p.latencyCount = make(map[resourceKey]map[metricKey]uint64)
-	p.latencySum = make(map[resourceKey]map[metricKey]float64)
-	p.latencyBucketCounts = make(map[resourceKey]map[metricKey][]uint64)
+	p.callSum = make(map[resourceKey]map[instrLibKey]map[metricKey]int64)
+	p.latencyCount = make(map[resourceKey]map[instrLibKey]map[metricKey]uint64)
+	p.latencySum = make(map[resourceKey]map[instrLibKey]map[metricKey]float64)
+	p.latencyBucketCounts = make(map[resourceKey]map[instrLibKey]map[metricKey][]uint64)
 	p.metricKeyToDimensions.Purge()
 	p.resourceKeyToDimensions.Purge()
 }
@@ -510,7 +510,7 @@ func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, 
 // the data structure. An exemplar is a punctual value that exists at specific moment in time
 // and should be not considered like a metrics that persist over time.
 func (p *processorImp) resetExemplarData() {
-	p.latencyExemplarsData = make(map[resourceKey]map[metricKey][]exemplarData)
+	p.latencyExemplarsData = make(map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData)
 }
 
 // updateLatencyMetrics increments the histogram counts for the given metric key and bucket index.
