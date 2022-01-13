@@ -41,6 +41,7 @@ processors:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
     aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    inherit_instrumentation_library_name: false
 
 service:
   pipelines:
