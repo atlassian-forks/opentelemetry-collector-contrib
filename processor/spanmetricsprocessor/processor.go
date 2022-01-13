@@ -92,7 +92,7 @@ type processorImp struct {
 	startTime time.Time
 
 	// Call & Error counts.
-	callSum map[resourceKey]map[metricKey]int64
+	callSum map[resourceKey]map[instrLibKey]map[metricKey]int64
 
 	// Latency histogram.
 	latencyCount         map[resourceKey]map[instrLibKey]map[metricKey]uint64
@@ -428,7 +428,7 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 	}
 }
 
-func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Span, resourceAttr pdata.AttributeMap, instrLibName string) {
+func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Span, resourceAttr pdata.AttributeMap, instrLibName instrLibKey) {
 	latencyInMilliseconds := float64(span.EndTimestamp()-span.StartTimestamp()) / float64(time.Millisecond.Nanoseconds())
 
 	// Binary search to find the latencyInMilliseconds bucket index.
@@ -445,9 +445,13 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 }
 
 // updateCallMetrics increments the call count for the given metric key.
-func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, instrLibName string) {
+func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, instrLibName instrLibKey) {
 	if _, ok := p.callSum[rKey]; !ok {
-		p.callSum[rKey] = make(map[metricKey]int64)
+		p.callSum[rKey] = make(map[instrLibKey]map[metricKey]int64)
+	}
+
+	if _, ok := p.callSum[rKey][instrLibName]; !ok {
+		p.callSum[rKey][instrLibName] = make(map[metricKey]int64)
 	}
 
 	p.callSum[rKey][instrLibName][mKey]++
@@ -477,12 +481,15 @@ func (p *processorImp) resetAccumulatedMetrics() {
 }
 
 // updateLatencyExemplars sets the histogram exemplars for the given resource and metric key and append the exemplar data.
-func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, value float64, traceID pdata.TraceID, instrLibName string) {
-	// TODO: CLAIRE: FIX THIS: instrLibName
-	rled, ok := p.latencyExemplarsData[rKey]
+func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, value float64, traceID pdata.TraceID, instrLibName instrLibKey) {
+	if _, ok := p.latencyExemplarsData[rKey]; !ok {
+		p.latencyExemplarsData[rKey] = make(map[instrLibKey]map[metricKey][]exemplarData)
+	}
+
+	rled, ok := p.latencyExemplarsData[rKey][instrLibName]
 	if !ok {
 		rled = make(map[metricKey][]exemplarData)
-		p.latencyExemplarsData[rKey] = rled
+		p.latencyExemplarsData[rKey][instrLibName] = rled
 	}
 
 	rled[mKey] = append(rled[mKey], exemplarData{
@@ -499,29 +506,36 @@ func (p *processorImp) resetExemplarData() {
 }
 
 // updateLatencyMetrics increments the histogram counts for the given metric key and bucket index.
-func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, latency float64, index int, instrLibName string) {
-	// TODO: CLAIRE: FIX THIS
+func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, latency float64, index int, instrLibName instrLibKey) {
+	// update latency bucket counts
 	if _, ok := p.latencyBucketCounts[rKey]; !ok {
-		p.latencyBucketCounts[rKey] = make(map[metricKey][]uint64)
+		p.latencyBucketCounts[rKey] = make(map[instrLibKey]map[metricKey][]uint64)
 	}
-
-	if _, ok := p.latencyBucketCounts[rKey][mKey]; !ok {
-		p.latencyBucketCounts[rKey][mKey] = make([]uint64, len(p.latencyBounds))
+	if _, ok := p.latencyBucketCounts[rKey][instrLibName]; !ok {
+		p.latencyBucketCounts[rKey][instrLibName] = make(map[metricKey][]uint64)
 	}
-
-	p.latencyBucketCounts[rKey][mKey][index]++
-
-	if _, ok := p.latencySum[rKey]; ok {
-		p.latencySum[rKey][mKey] += latency
-	} else {
-		p.latencySum[rKey] = map[metricKey]float64{mKey: latency}
+	if _, ok := p.latencyBucketCounts[rKey][instrLibName][mKey]; !ok {
+		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds))
 	}
+	p.latencyBucketCounts[rKey][instrLibName][mKey][index]++
 
-	if _, ok := p.latencyCount[rKey]; ok {
-		p.latencyCount[rKey][mKey]++
-	} else {
-		p.latencyCount[rKey] = map[metricKey]uint64{mKey: 1}
+	// update latency sum
+	if _, ok := p.latencySum[rKey]; !ok {
+		p.latencySum[rKey] = make(map[instrLibKey]map[metricKey]float64)
 	}
+	if _, ok := p.latencySum[rKey][instrLibName]; !ok {
+		p.latencySum[rKey][instrLibName] = make(map[metricKey]float64)
+	}
+	p.latencySum[rKey][instrLibName][mKey] += latency
+
+	// update latency count
+	if _, ok := p.latencyCount[rKey]; !ok {
+		p.latencyCount[rKey] = make(map[instrLibKey]map[metricKey]uint64)
+	}
+	if _, ok := p.latencyCount[rKey][instrLibName]; !ok {
+		p.latencyCount[rKey][instrLibName] = make(map[metricKey]uint64)
+	}
+	p.latencyCount[rKey][instrLibName][mKey]++
 }
 
 func (p *processorImp) buildDimensionKVs(span pdata.Span, optionalDims []Dimension, resourceAttrs pdata.AttributeMap) pdata.AttributeMap {
