@@ -38,28 +38,31 @@ func TestLoadConfig(t *testing.T) {
 	defaultMethod := "GET"
 	defaultRegion := "us-east-1"
 	testcases := []struct {
-		configFile                      string
-		wantMetricsExporter             string
-		wantLatencyHistogramBuckets     []time.Duration
-		wantDimensions                  []Dimension
-		wantDimensionsCacheSize         int
-		wantResourceAttributes          []Dimension
-		wantResourceAttributesCacheSize int
-		wantAggregationTemporality      string
+		configFile                            string
+		wantMetricsExporter                   string
+		wantLatencyHistogramBuckets           []time.Duration
+		wantDimensions                        []Dimension
+		wantDimensionsCacheSize               int
+		wantResourceAttributes                []Dimension
+		wantResourceAttributesCacheSize       int
+		wantAggregationTemporality            string
+		wantInheritInstrumentationLibraryName bool
 	}{
 		{
-			configFile:                      "config-2-pipelines.yaml",
-			wantMetricsExporter:             "prometheus",
-			wantAggregationTemporality:      cumulative,
-			wantDimensionsCacheSize:         500,
-			wantResourceAttributesCacheSize: 300,
+			configFile:                            "config-2-pipelines.yaml",
+			wantMetricsExporter:                   "prometheus",
+			wantAggregationTemporality:            cumulative,
+			wantDimensionsCacheSize:               500,
+			wantResourceAttributesCacheSize:       300,
+			wantInheritInstrumentationLibraryName: true,
 		},
 		{
-			configFile:                      "config-3-pipelines.yaml",
-			wantMetricsExporter:             "otlp/spanmetrics",
-			wantAggregationTemporality:      cumulative,
-			wantDimensionsCacheSize:         defaultDimensionsCacheSize,
-			wantResourceAttributesCacheSize: defaultResourceAttributesCacheSize,
+			configFile:                            "config-3-pipelines.yaml",
+			wantMetricsExporter:                   "otlp/spanmetrics",
+			wantAggregationTemporality:            cumulative,
+			wantDimensionsCacheSize:               defaultDimensionsCacheSize,
+			wantResourceAttributesCacheSize:       defaultResourceAttributesCacheSize,
+			wantInheritInstrumentationLibraryName: false,
 		},
 		{
 			configFile:          "config-full.yaml",
@@ -82,8 +85,9 @@ func TestLoadConfig(t *testing.T) {
 				{"region", &defaultRegion},
 				{"host_id", nil},
 			},
-			wantResourceAttributesCacheSize: 3000,
-			wantAggregationTemporality:      delta,
+			wantResourceAttributesCacheSize:       3000,
+			wantAggregationTemporality:            delta,
+			wantInheritInstrumentationLibraryName: false,
 		},
 	}
 	for _, tc := range testcases {

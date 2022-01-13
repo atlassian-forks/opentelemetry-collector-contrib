@@ -68,6 +68,9 @@ type metricKey string
 // resourceKey is used to carry the stringified resource attributes
 type resourceKey string
 
+// instrLibKey is used to carry the stringified instrumentation library name
+type instrLibKey string
+
 type processorImp struct {
 	// ConsumeTraces() of each instance might be called concurrently from its upstream component in the pipeline.
 	// As this processor is stateful. Due to the nature of its logic, the concurrent executions of ConsumeTraces() will
@@ -92,17 +95,20 @@ type processorImp struct {
 	callSum map[resourceKey]map[metricKey]int64
 
 	// Latency histogram.
-	latencyCount         map[resourceKey]map[metricKey]uint64
-	latencySum           map[resourceKey]map[metricKey]float64
-	latencyBucketCounts  map[resourceKey]map[metricKey][]uint64
+	latencyCount         map[resourceKey]map[instrLibKey]map[metricKey]uint64
+	latencySum           map[resourceKey]map[instrLibKey]map[metricKey]float64
+	latencyBucketCounts  map[resourceKey]map[instrLibKey]map[metricKey][]uint64
 	latencyBounds        []float64
-	latencyExemplarsData map[resourceKey]map[metricKey][]exemplarData
+	latencyExemplarsData map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData
 
 	// An LRU cache of dimension key-value maps keyed by a unique identifier formed by a concatenation of its values:
 	// e.g. { "foo/barOK": { "serviceName": "foo", "operation": "/bar", "status_code": "OK" }}
 	metricKeyToDimensions *cache.Cache
 	// An LRU cache of resourceattributekey-value maps keyed by a unique identifier formed by a concatenation of its values.
 	resourceKeyToDimensions *cache.Cache
+
+	// Defines whether metrics should inherit instrumentation library name from span
+	inheritInstrumentationLibraryName bool
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -137,20 +143,21 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 	}
 
 	return &processorImp{
-		logger:                  logger,
-		config:                  *pConfig,
-		startTime:               time.Now(),
-		callSum:                 make(map[resourceKey]map[metricKey]int64),
-		latencyBounds:           bounds,
-		latencySum:              make(map[resourceKey]map[metricKey]float64),
-		latencyCount:            make(map[resourceKey]map[metricKey]uint64),
-		latencyBucketCounts:     make(map[resourceKey]map[metricKey][]uint64),
-		latencyExemplarsData:    make(map[resourceKey]map[metricKey][]exemplarData),
-		nextConsumer:            nextConsumer,
-		dimensions:              pConfig.Dimensions,
-		resourceAttributes:      pConfig.ResourceAttributes,
-		resourceKeyToDimensions: resourceKeyToDimensionsCache,
-		metricKeyToDimensions:   metricKeyToDimensionsCache,
+		logger:                            logger,
+		config:                            *pConfig,
+		startTime:                         time.Now(),
+		callSum:                           make(map[resourceKey]map[instrLibKey]map[metricKey]int64),
+		latencyBounds:                     bounds,
+		latencySum:                        make(map[resourceKey]map[instrLibKey]map[metricKey]float64),
+		latencyCount:                      make(map[resourceKey]map[instrLibKey]map[metricKey]uint64),
+		latencyBucketCounts:               make(map[resourceKey]map[instrLibKey]map[metricKey][]uint64),
+		latencyExemplarsData:              make(map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData),
+		nextConsumer:                      nextConsumer,
+		dimensions:                        pConfig.Dimensions,
+		resourceAttributes:                pConfig.ResourceAttributes,
+		resourceKeyToDimensions:           resourceKeyToDimensionsCache,
+		metricKeyToDimensions:             metricKeyToDimensionsCache,
+		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 	}, nil
 }
 
@@ -297,6 +304,7 @@ func (p *processorImp) buildMetrics() (*pdata.Metrics, error) {
 		})
 
 		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
+		//TODO: CLAIRE: this should be done inside the functions now
 		ilm.InstrumentationLibrary().SetName(instrumentationLibraryName)
 
 		// build metrics per resource
@@ -320,6 +328,7 @@ func (p *processorImp) buildMetrics() (*pdata.Metrics, error) {
 // collectLatencyMetrics collects the raw latency metrics, writing the data
 // into the given instrumentation library metrics.
 func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMetrics, resAttrKey resourceKey) error {
+	// TODO: CLAIRE
 	for mKey := range p.latencyCount[resAttrKey] {
 		mLatency := ilm.Metrics().AppendEmpty()
 		mLatency.SetDataType(pdata.MetricDataTypeHistogram)
@@ -352,6 +361,7 @@ func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMet
 // collectCallMetrics collects the raw call count metrics, writing the data
 // into the given instrumentation library metrics.
 func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetrics, resAttrKey resourceKey) error {
+	// TODO: CLAIRE
 	for mKey := range p.callSum[resAttrKey] {
 		mCalls := ilm.Metrics().AppendEmpty()
 		mCalls.SetDataType(pdata.MetricDataTypeSum)
@@ -409,15 +419,16 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 	ilsSlice := rspans.InstrumentationLibrarySpans()
 	for j := 0; j < ilsSlice.Len(); j++ {
 		ils := ilsSlice.At(j)
+		instrLibName := ils.InstrumentationLibrary().Name()
 		spans := ils.Spans()
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
-			p.aggregateMetricsForSpan(serviceName, span, rspans.Resource().Attributes())
+			p.aggregateMetricsForSpan(serviceName, span, rspans.Resource().Attributes(), instrLibName)
 		}
 	}
 }
 
-func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Span, resourceAttr pdata.AttributeMap) {
+func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Span, resourceAttr pdata.AttributeMap, instrLibName string) {
 	latencyInMilliseconds := float64(span.EndTimestamp()-span.StartTimestamp()) / float64(time.Millisecond.Nanoseconds())
 
 	// Binary search to find the latencyInMilliseconds bucket index.
@@ -428,18 +439,18 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 
 	p.cacheMetricKey(span, mKey, resourceAttr)
 	p.cacheResourceAttrKey(serviceName, resourceAttr, resourceAttrKey)
-	p.updateCallMetrics(resourceAttrKey, mKey)
-	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index)
-	p.updateLatencyExemplars(resourceAttrKey, mKey, latencyInMilliseconds, span.TraceID())
+	p.updateCallMetrics(resourceAttrKey, mKey, instrLibName)
+	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index, instrLibName)
+	p.updateLatencyExemplars(resourceAttrKey, mKey, latencyInMilliseconds, span.TraceID(), instrLibName)
 }
 
 // updateCallMetrics increments the call count for the given metric key.
-func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey) {
+func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, instrLibName string) {
 	if _, ok := p.callSum[rKey]; !ok {
 		p.callSum[rKey] = make(map[metricKey]int64)
 	}
 
-	p.callSum[rKey][mKey]++
+	p.callSum[rKey][instrLibName][mKey]++
 }
 
 func (p *processorImp) reset() {
@@ -466,7 +477,8 @@ func (p *processorImp) resetAccumulatedMetrics() {
 }
 
 // updateLatencyExemplars sets the histogram exemplars for the given resource and metric key and append the exemplar data.
-func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, value float64, traceID pdata.TraceID) {
+func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, value float64, traceID pdata.TraceID, instrLibName string) {
+	// TODO: CLAIRE: FIX THIS: instrLibName
 	rled, ok := p.latencyExemplarsData[rKey]
 	if !ok {
 		rled = make(map[metricKey][]exemplarData)
@@ -487,7 +499,8 @@ func (p *processorImp) resetExemplarData() {
 }
 
 // updateLatencyMetrics increments the histogram counts for the given metric key and bucket index.
-func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, latency float64, index int) {
+func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, latency float64, index int, instrLibName string) {
+	// TODO: CLAIRE: FIX THIS
 	if _, ok := p.latencyBucketCounts[rKey]; !ok {
 		p.latencyBucketCounts[rKey] = make(map[metricKey][]uint64)
 	}

@@ -70,6 +70,9 @@ The following settings can be optionally configured:
 
 - `resource_attributes_cache_size`: the max number of items in the `resource_key_to_dimensions_cache`. If not provided,
    will use default value size `1000`.
+
+- `inherit_instrumentation_library_name`: defines whether the metrics generated from spans should inherit the same instrumentation library name as the span. If not provided, will use default value of `false` which will define the instrumentation library name as `spanmetricsprocessor` on metrics.
+
 ## Examples
 
 The following is a simple example usage of the spanmetrics processor.

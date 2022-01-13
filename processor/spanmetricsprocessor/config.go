@@ -69,6 +69,11 @@ type Config struct {
 	// memory growing indefinitely over the lifetime of the collector.
 	// Optional. See defaultResourceAttributesCacheSize in processor.go for the default value.
 	ResourceAttributesCacheSize int `mapstructure:"resource_attributes_cache_size"`
+
+	// InheritInstrumentationLibraryName defines whether metrics generated from spans should inherit
+	// the instrumentation library name from the span.
+	// Optional. The default value is `false` which will define the instrumentation library name on metrics as `spanmetricsprocessor`.
+	InheritInstrumentationLibraryName bool `mapstructure:"inherit_instrumentation_library_name"`
 }
 
 // GetAggregationTemporality converts the string value given in the config into a MetricAggregationTemporality.
