@@ -19,19 +19,19 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/collector/config/configtest"
+	"go.opentelemetry.io/collector/exporter/jaegerexporter"
+	"go.opentelemetry.io/collector/exporter/prometheusexporter"
+	"go.opentelemetry.io/collector/receiver/jaegerreceiver"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/consumer/pdata"
 	"go.opentelemetry.io/collector/exporter/otlpexporter"
-	"go.opentelemetry.io/collector/model/pdata"
 	"go.opentelemetry.io/collector/processor/batchprocessor"
 	"go.opentelemetry.io/collector/receiver/otlpreceiver"
-	"go.opentelemetry.io/collector/service/servicetest"
-
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/jaegerexporter"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/prometheusexporter"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/jaegerreceiver"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -109,14 +109,14 @@ func TestLoadConfig(t *testing.T) {
 			factories.Exporters["jaeger"] = jaegerexporter.NewFactory()
 
 			// Test
-			cfg, err := servicetest.LoadConfigAndValidate(path.Join(".", "testdata", tc.configFile), factories)
+			cfg, err := configtest.LoadConfigFile(t, path.Join(".", "testdata", tc.configFile), factories)
 
 			// Verify
 			require.NoError(t, err)
 			require.NotNil(t, cfg)
 			assert.Equal(t,
 				&Config{
-					ProcessorSettings:           config.NewProcessorSettings(config.NewComponentID(typeStr)),
+					ProcessorSettings:           config.NewProcessorSettings(config.NewID(typeStr)),
 					MetricsExporter:             tc.wantMetricsExporter,
 					LatencyHistogramBuckets:     tc.wantLatencyHistogramBuckets,
 					Dimensions:                  tc.wantDimensions,
@@ -125,7 +125,7 @@ func TestLoadConfig(t *testing.T) {
 					ResourceAttributesCacheSize: tc.wantResourceAttributesCacheSize,
 					AggregationTemporality:      tc.wantAggregationTemporality,
 				},
-				cfg.Processors[config.NewComponentID(typeStr)],
+				cfg.Processors[config.NewID(typeStr)],
 			)
 		})
 	}
@@ -133,11 +133,11 @@ func TestLoadConfig(t *testing.T) {
 
 func TestGetAggregationTemporality(t *testing.T) {
 	cfg := &Config{AggregationTemporality: delta}
-	assert.Equal(t, pdata.MetricAggregationTemporalityDelta, cfg.GetAggregationTemporality())
+	assert.Equal(t, pdata.AggregationTemporalityDelta, cfg.GetAggregationTemporality())
 
 	cfg = &Config{AggregationTemporality: cumulative}
-	assert.Equal(t, pdata.MetricAggregationTemporalityCumulative, cfg.GetAggregationTemporality())
+	assert.Equal(t, pdata.AggregationTemporalityCumulative, cfg.GetAggregationTemporality())
 
 	cfg = &Config{}
-	assert.Equal(t, pdata.MetricAggregationTemporalityCumulative, cfg.GetAggregationTemporality())
+	assert.Equal(t, pdata.AggregationTemporalityCumulative, cfg.GetAggregationTemporality())
 }

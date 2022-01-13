@@ -18,13 +18,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/collector/translator/conventions"
 	"math"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+
+	"go.opentelemetry.io/collector/translator/conventions"
+	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
@@ -353,7 +355,10 @@ func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMet
 			return err
 		}
 
-		dimensions.CopyTo(dpLatency.Attributes())
+		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
+			dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
+			return true
+		})
 	}
 	return nil
 }
@@ -364,15 +369,15 @@ func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetric
 	// TODO: CLAIRE
 	for mKey := range p.callSum[resAttrKey] {
 		mCalls := ilm.Metrics().AppendEmpty()
-		mCalls.SetDataType(pdata.MetricDataTypeSum)
+		mCalls.SetDataType(pdata.MetricDataTypeIntSum)
 		mCalls.SetName("calls_total")
-		mCalls.Sum().SetIsMonotonic(true)
-		mCalls.Sum().SetAggregationTemporality(p.config.GetAggregationTemporality())
+		mCalls.IntSum().SetIsMonotonic(true)
+		mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
-		dpCalls := mCalls.Sum().DataPoints().AppendEmpty()
-		dpCalls.SetStartTimestamp(pdata.NewTimestampFromTime(p.startTime))
-		dpCalls.SetTimestamp(pdata.NewTimestampFromTime(time.Now()))
-		dpCalls.SetIntVal(p.callSum[resAttrKey][mKey])
+		dpCalls := mCalls.IntSum().DataPoints().AppendEmpty()
+		dpCalls.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
+		dpCalls.SetTimestamp(pdata.TimestampFromTime(time.Now()))
+		dpCalls.SetValue(p.callSum[resAttrKey][mKey])
 
 		dimensions, err := p.getDimensionsByMetricKey(mKey)
 		if err != nil {
@@ -380,7 +385,10 @@ func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetric
 			return err
 		}
 
-		dimensions.CopyTo(dpCalls.Attributes())
+		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
+			dpCalls.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
+			return true
+		})
 	}
 	return nil
 }
@@ -459,7 +467,7 @@ func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, instr
 
 func (p *processorImp) reset() {
 	// If delta metrics, reset accumulated data
-	if p.config.GetAggregationTemporality() == pdata.MetricAggregationTemporalityDelta {
+	if p.config.GetAggregationTemporality() == pdata.AggregationTemporalityDelta {
 		p.resetAccumulatedMetrics()
 	} else {
 		p.metricKeyToDimensions.RemoveEvictedItems()
@@ -581,7 +589,7 @@ func (p *processorImp) buildMetricKey(span pdata.Span, resourceAttrs pdata.Attri
 
 	for _, d := range p.dimensions {
 		if v, ok := getDimensionValue(d, span.Attributes(), resourceAttrs); ok {
-			mkb.Append(v.AsString())
+			mkb.Append(tracetranslator.AttributeValueToString(v))
 		}
 	}
 
@@ -600,7 +608,7 @@ func (p *processorImp) buildResourceAttrKey(serviceName string, resourceAttr pda
 
 	for _, ra := range p.resourceAttributes {
 		if attr, ok := resourceAttr.Get(ra.Name); ok {
-			rkb.Append(attr.AsString())
+			rkb.Append(tracetranslator.AttributeValueToString(attr))
 		} else if ra.Default != nil {
 			// Set the default if configured, otherwise this metric should have no value set for the resource attribute.
 			rkb.Append(*ra.Default)
@@ -681,7 +689,6 @@ func sanitizeRune(r rune) rune {
 // setLatencyExemplars sets the histogram exemplars.
 func setLatencyExemplars(exemplarsData []exemplarData, timestamp pdata.Timestamp, exemplars pdata.ExemplarSlice) {
 	es := pdata.NewExemplarSlice()
-	es.EnsureCapacity(len(exemplarsData))
 
 	for _, ed := range exemplarsData {
 		value := ed.value
@@ -693,9 +700,9 @@ func setLatencyExemplars(exemplarsData []exemplarData, timestamp pdata.Timestamp
 			continue
 		}
 
-		exemplar.SetDoubleVal(value)
+		exemplar.SetValue(value)
 		exemplar.SetTimestamp(timestamp)
-		exemplar.FilteredAttributes().Insert(traceIDKey, pdata.NewAttributeValueString(traceID.HexString()))
+		exemplar.FilteredLabels().Insert(traceIDKey, pdata.NewAttributeValueString(traceID.HexString()).StringVal())
 	}
 
 	es.CopyTo(exemplars)

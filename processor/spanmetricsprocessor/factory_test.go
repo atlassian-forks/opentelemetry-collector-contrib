@@ -19,8 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
+	"go.uber.org/zap"
+
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 )
 
@@ -61,7 +63,7 @@ func TestNewProcessor(t *testing.T) {
 			// Prepare
 			factory := NewFactory()
 
-			creationParams := componenttest.NewNopProcessorCreateSettings()
+			creationParams := component.ProcessorCreateParams{Logger: zap.NewNop()}
 			cfg := factory.CreateDefaultConfig().(*Config)
 			cfg.LatencyHistogramBuckets = tc.latencyHistogramBuckets
 			cfg.Dimensions = tc.dimensions
