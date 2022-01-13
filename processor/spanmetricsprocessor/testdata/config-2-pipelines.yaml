@@ -17,7 +17,6 @@ receivers:
 exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
-    namespace: promexample
 
   jaeger:
     endpoint: "localhost:14250"
@@ -27,7 +26,9 @@ processors:
   batch:
   spanmetrics:
     metrics_exporter: prometheus
-
+    dimensions_cache_size: 500
+    # the max number of items in the `resource_key_to_dimensions_cache`. Default is 1000
+    resource_attributes_cache_size: 300
 service:
   pipelines:
     traces:

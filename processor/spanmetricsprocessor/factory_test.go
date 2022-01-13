@@ -19,10 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.uber.org/zap"
+
+	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/collector/consumer/consumertest"
 )
 
 func TestNewProcessor(t *testing.T) {

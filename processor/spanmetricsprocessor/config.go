@@ -12,15 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package spanmetricsprocessor
+package spanmetricsprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor"
 
 import (
 	"time"
 
 	"go.opentelemetry.io/collector/config"
+	"go.opentelemetry.io/collector/consumer/pdata"
 )
 
-// Dimension defines the dimension name and optional default value if the Dimension is missing from a span attribute.
+const (
+	delta      = "AGGREGATION_TEMPORALITY_DELTA"
+	cumulative = "AGGREGATION_TEMPORALITY_CUMULATIVE"
+)
+
+// Dimension defines the key and optional default value if the key is missing from a span attribute.
 type Dimension struct {
 	Name    string  `mapstructure:"name"`
 	Default *string `mapstructure:"default"`
@@ -38,11 +44,38 @@ type Config struct {
 	LatencyHistogramBuckets []time.Duration `mapstructure:"latency_histogram_buckets"`
 
 	// Dimensions defines the list of additional dimensions on top of the provided:
-	// - service.name
 	// - operation
 	// - span.kind
 	// - status.code
 	// The dimensions will be fetched from the span's attributes. Examples of some conventionally used attributes:
-	// https://github.com/open-telemetry/opentelemetry-collector/blob/main/translator/conventions/opentelemetry.go.
+	// https://github.com/open-telemetry/opentelemetry-collector/blob/main/model/semconv/opentelemetry.go.
 	Dimensions []Dimension `mapstructure:"dimensions"`
+
+	// DimensionsCacheSize defines the size of cache for storing Dimensions, which helps to avoid cache memory growing
+	// indefinitely over the lifetime of the collector.
+	// Optional. See defaultDimensionsCacheSize in processor.go for the default value.
+	DimensionsCacheSize int `mapstructure:"dimensions_cache_size"`
+
+	AggregationTemporality string `mapstructure:"aggregation_temporality"`
+
+	// ResourceAttributes defines the list of additional resource attributes to attach to metrics on top of the provided:
+	// - service.name
+	// These will be fetched from the span's resource attributes. For more details, see:
+	// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md
+	// and https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md.
+	ResourceAttributes []Dimension `mapstructure:"resource_attributes"`
+
+	// ResourceAttributesCacheSize defines the size of cache for storing ResourceAttributes, which helps to avoid cache
+	// memory growing indefinitely over the lifetime of the collector.
+	// Optional. See defaultResourceAttributesCacheSize in processor.go for the default value.
+	ResourceAttributesCacheSize int `mapstructure:"resource_attributes_cache_size"`
+}
+
+// GetAggregationTemporality converts the string value given in the config into a MetricAggregationTemporality.
+// Returns cumulative, unless delta is correctly specified.
+func (c Config) GetAggregationTemporality() pdata.AggregationTemporality {
+	if c.AggregationTemporality == delta {
+		return pdata.AggregationTemporalityDelta
+	}
+	return pdata.AggregationTemporalityCumulative
 }
