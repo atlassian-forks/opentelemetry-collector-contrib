@@ -16,10 +16,11 @@ package spanmetricsprocessor
 
 import (
 	"context"
-	"go.opentelemetry.io/collector/component"
-	"go.uber.org/zap"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/collector/component"
+	"go.uber.org/zap"
 
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/collector/consumer/consumertest"

@@ -17,9 +17,10 @@ package spanmetricsprocessor
 import (
 	"context"
 	"fmt"
-	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 	"testing"
 	"time"
+
+	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -794,7 +795,7 @@ func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExpo
 			Endpoint: "example.com:1234",
 		},
 	}
-	expCreationParams :=  component.ExporterCreateParams{Logger: zap.NewNop()}
+	expCreationParams := component.ExporterCreateParams{Logger: zap.NewNop()}
 	mexp, err := otlpExpFactory.CreateMetricsExporter(context.Background(), expCreationParams, otlpConfig)
 	require.NoError(t, err)
 	texp, err := otlpExpFactory.CreateTracesExporter(context.Background(), expCreationParams, otlpConfig)

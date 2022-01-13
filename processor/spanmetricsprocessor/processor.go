@@ -18,14 +18,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/collector/translator/conventions"
-	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 	"math"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+
+	"go.opentelemetry.io/collector/translator/conventions"
+	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/config"
