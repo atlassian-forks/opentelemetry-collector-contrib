@@ -124,6 +124,7 @@ func TestLoadConfig(t *testing.T) {
 					ResourceAttributes:          tc.wantResourceAttributes,
 					ResourceAttributesCacheSize: tc.wantResourceAttributesCacheSize,
 					AggregationTemporality:      tc.wantAggregationTemporality,
+					InheritInstrumentationLibraryName: tc.wantInheritInstrumentationLibraryName,
 				},
 				cfg.Processors[config.NewID(typeStr)],
 			)

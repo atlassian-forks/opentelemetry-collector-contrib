@@ -79,8 +79,9 @@ type metricDataPoint interface {
 }
 
 type serviceSpans struct {
-	serviceName string
-	spans       []span
+	serviceName                string
+	spans                      []span
+	instrumentationLibraryName string
 }
 
 type span struct {
@@ -214,7 +215,7 @@ func TestProcessorConsumeTracesErrors(t *testing.T) {
 			tcon := &mocks.TracesConsumer{}
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(tc.consumeTracesErr)
 
-			p := newProcessorImp(mexp, tcon, nil, cumulative, t)
+			p := newProcessorImp(mexp, tcon, nil, cumulative, t, false)
 
 			traces := buildSampleTrace()
 
@@ -270,7 +271,7 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t)
+			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false)
 
 			for _, traces := range tc.traces {
 				// Test
@@ -337,7 +338,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t)
+			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false)
 
 			for _, traces := range tc.traces {
 				// Test
@@ -351,33 +352,91 @@ func TestProcessorConsumeTraces(t *testing.T) {
 	}
 }
 
+func TestInheritInstrumentationLibraryName(t *testing.T) {
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
+
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		rmA, rmB := extractResourceMetricsHelper(t, input)
+
+		assert.Equal(t, "service-a-instrumentation-library", rmA.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
+		assert.Equal(t, "service-b-instrumentation-library", rmB.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
+
+		return true
+	})).Return(nil)
+
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+	defaultNullValue := "defaultNullValue"
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, true)
+
+	traces := buildSampleTrace()
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, traces)
+
+	// Verify
+	assert.NoError(t, err)
+}
+
+func TestDefaultInstrumentationLibraryName(t *testing.T) {
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
+
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		rmA, rmB := extractResourceMetricsHelper(t, input)
+		assert.Equal(t, instrumentationLibraryName, rmA.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
+		assert.Equal(t, instrumentationLibraryName, rmB.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
+
+		return true
+	})).Return(nil)
+
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+	defaultNullValue := "defaultNullValue"
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
+
+	traces := buildSampleTrace()
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, traces)
+
+	// Verify
+	assert.NoError(t, err)
+}
+
+func extractResourceMetricsHelper(t *testing.T, input pdata.Metrics) (pdata.ResourceMetrics, pdata.ResourceMetrics) {
+	rm := input.ResourceMetrics()
+	require.Equal(t, 2, rm.Len())
+
+	rm0 := rm.At(0)
+	rm1 := rm.At(1)
+	serviceName, ok := getServiceName(rm0)
+	assert.True(t, ok, "should get service name from resourceMetric")
+
+	if serviceName == "service-a" {
+		return rm0, rm1
+	}
+
+	return rm1, rm0
+}
+
 func TestResourceCopying(t *testing.T) {
 	// Prepare
 	mexp := &mocks.MetricsExporter{}
 	tcon := &mocks.TracesConsumer{}
 
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-		rm := input.ResourceMetrics()
-		require.Equal(t, 2, rm.Len())
-
-		var rmA, rmB pdata.ResourceMetrics
-		rm0 := rm.At(0)
-		rm1 := rm.At(1)
-		serviceName, ok := getServiceName(rm0)
-		assert.True(t, ok, "should get service name from resourceMetric")
-
-		if serviceName == "service-a" {
-			rmA = rm0
-			rmB = rm1
-		} else {
-			rmB = rm0
-			rmA = rm1
-		}
+		rmA, rmB := extractResourceMetricsHelper(t, input)
 
 		require.Equal(t, 4, rmA.Resource().Attributes().Len())
-		require.Equal(t, 4, rmA.InstrumentationLibraryMetrics().At(0).Metrics().Len())
+		require.Equal(t, 2, rmA.InstrumentationLibraryMetrics().At(0).Metrics().Len())
+		require.Equal(t, 2, rmA.InstrumentationLibraryMetrics().At(1).Metrics().Len())
 		require.Equal(t, 2, rmB.Resource().Attributes().Len())
-		require.Equal(t, 2, rmB.InstrumentationLibraryMetrics().At(0).Metrics().Len())
+		require.Equal(t, 1, rmB.InstrumentationLibraryMetrics().At(0).Metrics().Len())
+		require.Equal(t, 1, rmB.InstrumentationLibraryMetrics().At(1).Metrics().Len())
 
 		wantResourceAttrServiceA := map[string]string{
 			resourceAttr1:          "1",
@@ -421,7 +480,7 @@ func TestResourceCopying(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
 
 	traces := buildSampleTrace()
 	traces.ResourceSpans().At(0).Resource().Attributes().Insert(resourceAttr1, pdata.NewAttributeValueString("1"))
@@ -443,7 +502,7 @@ func TestMetricKeyCache(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
 
 	traces := buildSampleTrace()
 
@@ -476,7 +535,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, b)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, b, false)
 
 	traces := buildSampleTrace()
 
@@ -487,7 +546,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	}
 }
 
-func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string, temporality string, tb testing.TB) *processorImp {
+func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string, temporality string, tb testing.TB, inheritInstrumentationLibraryName bool) *processorImp {
 	localDefaultNotInSpanAttrVal := defaultNotInSpanAttrVal
 	// use size 2 for LRU cache for testing purpose
 	metricKeyToDimensions, err := cache.NewCache(DimensionsCacheSize)
@@ -507,12 +566,12 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 		nextConsumer:    tcon,
 
 		startTime:            time.Now(),
-		callSum:              make(map[resourceKey]map[metricKey]int64),
-		latencySum:           make(map[resourceKey]map[metricKey]float64),
-		latencyCount:         make(map[resourceKey]map[metricKey]uint64),
-		latencyBucketCounts:  make(map[resourceKey]map[metricKey][]uint64),
+		callSum:              make(map[resourceKey]map[instrLibKey]map[metricKey]int64),
+		latencySum:           make(map[resourceKey]map[instrLibKey]map[metricKey]float64),
+		latencyCount:         make(map[resourceKey]map[instrLibKey]map[metricKey]uint64),
+		latencyBucketCounts:  make(map[resourceKey]map[instrLibKey]map[metricKey][]uint64),
 		latencyBounds:        defaultLatencyHistogramBucketsMs,
-		latencyExemplarsData: make(map[resourceKey]map[metricKey][]exemplarData),
+		latencyExemplarsData: make(map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData),
 		dimensions: []Dimension{
 			// Set nil defaults to force a lookup for the attribute in the span.
 			{stringAttrName, nil},
@@ -535,8 +594,9 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			{notInSpanResourceAttr0, &localDefaultNotInSpanAttrVal},
 			{notInSpanResourceAttr1, nil},
 		},
-		resourceKeyToDimensions: resourceKeyToDimensions,
-		metricKeyToDimensions:   metricKeyToDimensions,
+		resourceKeyToDimensions:           resourceKeyToDimensions,
+		metricKeyToDimensions:             metricKeyToDimensions,
+		inheritInstrumentationLibraryName: inheritInstrumentationLibraryName,
 	}
 }
 
@@ -587,21 +647,29 @@ func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTempor
 
 	ilmA := rmA.InstrumentationLibraryMetrics()
 
-	require.Equal(t, 1, ilmA.Len())
+	require.Equal(t, 2, ilmA.Len())
 	assert.Equal(t, instrumentationLibraryName, ilmA.At(0).InstrumentationLibrary().Name())
 
-	mA := ilmA.At(0).Metrics()
-	require.Equal(t, 4, mA.Len())
+	mA1 := ilmA.At(0).Metrics()
+	require.Equal(t, 2, mA1.Len())
+	mA2 := ilmA.At(1).Metrics()
+	require.Equal(t, 2, mA2.Len())
 
 	ilmB := rmB.InstrumentationLibraryMetrics()
-	require.Equal(t, 1, ilmB.Len())
+	require.Equal(t, 2, ilmB.Len())
 	assert.Equal(t, instrumentationLibraryName, ilmB.At(0).InstrumentationLibrary().Name())
 
-	mB := ilmB.At(0).Metrics()
-	require.Equal(t, 2, mB.Len())
+	mB1 := ilmB.At(0).Metrics()
+	require.Equal(t, 1, mB1.Len())
+	mB2 := ilmB.At(1).Metrics()
+	require.Equal(t, 1, mB2.Len())
 
-	verifyMetrics(mA, expectedTemporality, numCumulativeConsumptions, 2, t)
-	verifyMetrics(mB, expectedTemporality, numCumulativeConsumptions, 1, t)
+	// mA1 and mbB1 contains "calls_total" metrics
+	// mA2 and mB2 contains "latency" metrics
+	verifyMetrics(mA1, expectedTemporality, numCumulativeConsumptions, 2, t)
+	verifyMetrics(mA2, expectedTemporality, numCumulativeConsumptions, 0, t)
+	verifyMetrics(mB1, expectedTemporality, numCumulativeConsumptions, 1, t)
+	verifyMetrics(mB2, expectedTemporality, numCumulativeConsumptions, 0, t)
 
 	return true
 }
@@ -727,7 +795,8 @@ func buildSampleTrace() pdata.Traces {
 
 	initServiceSpans(
 		serviceSpans{
-			serviceName: "service-a",
+			serviceName:                "service-a",
+			instrumentationLibraryName: "service-a-instrumentation-library",
 			spans: []span{
 				{
 					operation:  "/ping",
@@ -743,7 +812,8 @@ func buildSampleTrace() pdata.Traces {
 		}, traces.ResourceSpans().AppendEmpty())
 	initServiceSpans(
 		serviceSpans{
-			serviceName: "service-b",
+			serviceName:                "service-b",
+			instrumentationLibraryName: "service-b-instrumentation-library",
 			spans: []span{
 				{
 					operation:  "/ping",
@@ -765,6 +835,10 @@ func initServiceSpans(serviceSpans serviceSpans, spans pdata.ResourceSpans) {
 	spans.Resource().Attributes().InsertString(regionResourceAttrName, sampleRegion)
 
 	ils := spans.InstrumentationLibrarySpans().AppendEmpty()
+	if serviceSpans.instrumentationLibraryName != "" {
+		ils.InstrumentationLibrary().SetName(serviceSpans.instrumentationLibraryName)
+	}
+
 	for _, span := range serviceSpans.spans {
 		initSpan(span, ils.Spans().AppendEmpty())
 	}
@@ -1033,7 +1107,7 @@ func TestTraceWithoutServiceNameDoesNotGenerateMetrics(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
 
 	trace := pdata.NewTraces()
 
@@ -1099,6 +1173,7 @@ func TestProcessorUpdateLatencyExemplars(t *testing.T) {
 	cfg := factory.CreateDefaultConfig().(*Config)
 	traces := buildSampleTrace()
 	traceID := traces.ResourceSpans().At(0).InstrumentationLibrarySpans().At(0).Spans().At(0).TraceID()
+	traceInstrLibName := instrLibKey(instrumentationLibraryName)
 	mKey := metricKey("metricKey")
 	rKey := resourceKey("resourceKey")
 	next := new(consumertest.TracesSink)
@@ -1106,12 +1181,12 @@ func TestProcessorUpdateLatencyExemplars(t *testing.T) {
 	value := float64(42)
 
 	// ----- call -------------------------------------------------------------
-	p.updateLatencyExemplars(rKey, mKey, value, traceID)
+	p.updateLatencyExemplars(rKey, mKey, value, traceID, traceInstrLibName)
 
 	// ----- verify -----------------------------------------------------------
 	assert.NoError(t, err)
-	assert.NotEmpty(t, p.latencyExemplarsData[rKey][mKey])
-	assert.Equal(t, p.latencyExemplarsData[rKey][mKey][0], exemplarData{traceID: traceID, value: value})
+	assert.NotEmpty(t, p.latencyExemplarsData[rKey][traceInstrLibName][mKey])
+	assert.Equal(t, p.latencyExemplarsData[rKey][traceInstrLibName][mKey][0], exemplarData{traceID: traceID, value: value})
 }
 
 func TestProcessorResetExemplarData(t *testing.T) {
@@ -1121,6 +1196,7 @@ func TestProcessorResetExemplarData(t *testing.T) {
 
 	mKey := metricKey("metricKey")
 	rKey := resourceKey("resourceKey")
+	libKey := instrLibKey(instrumentationLibraryName)
 	next := new(consumertest.TracesSink)
 	p, err := newProcessor(zaptest.NewLogger(t), cfg, next)
 
@@ -1129,7 +1205,7 @@ func TestProcessorResetExemplarData(t *testing.T) {
 
 	// ----- verify -----------------------------------------------------------
 	assert.NoError(t, err)
-	assert.Empty(t, p.latencyExemplarsData[rKey][mKey])
+	assert.Empty(t, p.latencyExemplarsData[rKey][libKey][mKey])
 }
 
 func TestBuildResourceAttrKey(t *testing.T) {

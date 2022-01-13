@@ -305,21 +305,17 @@ func (p *processorImp) buildMetrics() (*pdata.Metrics, error) {
 			return true
 		})
 
-		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
-		//TODO: CLAIRE: this should be done inside the functions now
-		ilm.InstrumentationLibrary().SetName(instrumentationLibraryName)
-
 		// build metrics per resource
 		resourceAttrKey, ok := key.(resourceKey)
 		if !ok {
 			return nil, errors.New("resource key type assertion failed")
 		}
 
-		if err := p.collectCallMetrics(ilm, resourceAttrKey); err != nil {
+		if err := p.collectCallMetrics(rm, resourceAttrKey); err != nil {
 			return nil, err
 		}
 
-		if err := p.collectLatencyMetrics(ilm, resourceAttrKey); err != nil {
+		if err := p.collectLatencyMetrics(rm, resourceAttrKey); err != nil {
 			return nil, err
 		}
 
@@ -329,66 +325,72 @@ func (p *processorImp) buildMetrics() (*pdata.Metrics, error) {
 
 // collectLatencyMetrics collects the raw latency metrics, writing the data
 // into the given instrumentation library metrics.
-func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMetrics, resAttrKey resourceKey) error {
-	// TODO: CLAIRE
-	for mKey := range p.latencyCount[resAttrKey] {
-		mLatency := ilm.Metrics().AppendEmpty()
-		mLatency.SetDataType(pdata.MetricDataTypeHistogram)
-		mLatency.SetName("latency")
-		mLatency.Histogram().SetAggregationTemporality(p.config.GetAggregationTemporality())
+func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKey resourceKey) error {
+	for libKey := range p.latencyCount[resAttrKey] {
+		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
+		ilm.InstrumentationLibrary().SetName(string(libKey))
+		for mKey := range p.latencyCount[resAttrKey][libKey] {
+			mLatency := ilm.Metrics().AppendEmpty()
+			mLatency.SetDataType(pdata.MetricDataTypeHistogram)
+			mLatency.SetName("latency")
+			mLatency.Histogram().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
-		timestamp := pdata.TimestampFromTime(time.Now())
+			timestamp := pdata.TimestampFromTime(time.Now())
 
-		dpLatency := mLatency.Histogram().DataPoints().AppendEmpty()
-		dpLatency.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
-		dpLatency.SetTimestamp(timestamp)
-		dpLatency.SetExplicitBounds(p.latencyBounds)
-		dpLatency.SetBucketCounts(p.latencyBucketCounts[resAttrKey][mKey])
-		dpLatency.SetCount(p.latencyCount[resAttrKey][mKey])
-		dpLatency.SetSum(p.latencySum[resAttrKey][mKey])
+			dpLatency := mLatency.Histogram().DataPoints().AppendEmpty()
+			dpLatency.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
+			dpLatency.SetTimestamp(timestamp)
+			dpLatency.SetExplicitBounds(p.latencyBounds)
+			dpLatency.SetBucketCounts(p.latencyBucketCounts[resAttrKey][libKey][mKey])
+			dpLatency.SetCount(p.latencyCount[resAttrKey][libKey][mKey])
+			dpLatency.SetSum(p.latencySum[resAttrKey][libKey][mKey])
 
-		setLatencyExemplars(p.latencyExemplarsData[resAttrKey][mKey], timestamp, dpLatency.Exemplars())
+			setLatencyExemplars(p.latencyExemplarsData[resAttrKey][libKey][mKey], timestamp, dpLatency.Exemplars())
 
-		dimensions, err := p.getDimensionsByMetricKey(mKey)
-		if err != nil {
-			p.logger.Error(err.Error())
-			return err
+			dimensions, err := p.getDimensionsByMetricKey(mKey)
+			if err != nil {
+				p.logger.Error(err.Error())
+				return err
+			}
+
+			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
+				dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
+				return true
+			})
 		}
-
-		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
-			dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
-			return true
-		})
 	}
 	return nil
 }
 
 // collectCallMetrics collects the raw call count metrics, writing the data
 // into the given instrumentation library metrics.
-func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetrics, resAttrKey resourceKey) error {
-	// TODO: CLAIRE
-	for mKey := range p.callSum[resAttrKey] {
-		mCalls := ilm.Metrics().AppendEmpty()
-		mCalls.SetDataType(pdata.MetricDataTypeIntSum)
-		mCalls.SetName("calls_total")
-		mCalls.IntSum().SetIsMonotonic(true)
-		mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
+func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey resourceKey) error {
+	for libKey := range p.callSum[resAttrKey] {
+		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
+		ilm.InstrumentationLibrary().SetName(string(libKey))
+		for mKey := range p.callSum[resAttrKey][libKey] {
+			mCalls := ilm.Metrics().AppendEmpty()
+			mCalls.SetDataType(pdata.MetricDataTypeIntSum)
+			mCalls.SetName("calls_total")
+			mCalls.IntSum().SetIsMonotonic(true)
+			mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
-		dpCalls := mCalls.IntSum().DataPoints().AppendEmpty()
-		dpCalls.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
-		dpCalls.SetTimestamp(pdata.TimestampFromTime(time.Now()))
-		dpCalls.SetValue(p.callSum[resAttrKey][mKey])
+			dpCalls := mCalls.IntSum().DataPoints().AppendEmpty()
+			dpCalls.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
+			dpCalls.SetTimestamp(pdata.TimestampFromTime(time.Now()))
+			dpCalls.SetValue(p.callSum[resAttrKey][libKey][mKey])
 
-		dimensions, err := p.getDimensionsByMetricKey(mKey)
-		if err != nil {
-			p.logger.Error(err.Error())
-			return err
+			dimensions, err := p.getDimensionsByMetricKey(mKey)
+			if err != nil {
+				p.logger.Error(err.Error())
+				return err
+			}
+
+			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
+				dpCalls.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
+				return true
+			})
 		}
-
-		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
-			dpCalls.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
-			return true
-		})
 	}
 	return nil
 }
@@ -425,9 +427,16 @@ func (p *processorImp) aggregateMetrics(traces pdata.Traces) {
 
 func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpans, serviceName string) {
 	ilsSlice := rspans.InstrumentationLibrarySpans()
+	instrLibName := instrLibKey(instrumentationLibraryName)
 	for j := 0; j < ilsSlice.Len(); j++ {
 		ils := ilsSlice.At(j)
-		instrLibName := instrLibKey(ils.InstrumentationLibrary().Name())
+
+		// if confing is set to inherit instrumentation library name, then assume from trace
+		// otherwise use default
+		if p.inheritInstrumentationLibraryName {
+			instrLibName = instrLibKey(ils.InstrumentationLibrary().Name())
+		}
+
 		spans := ils.Spans()
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
