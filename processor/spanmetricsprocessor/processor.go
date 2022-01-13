@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"go.opentelemetry.io/collector/translator/conventions"
+	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 	"math"
 	"sort"
 	"strings"
@@ -345,7 +346,7 @@ func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMet
 		}
 
 		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
-			dpLatency.LabelsMap().Upsert(k, v.StringVal())
+			dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
 			return true
 		})
 	}
@@ -374,7 +375,7 @@ func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetric
 		}
 
 		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
-			dpCalls.LabelsMap().Upsert(k, v.StringVal())
+			dpCalls.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
 			return true
 		})
 	}
@@ -560,7 +561,7 @@ func (p *processorImp) buildMetricKey(span pdata.Span, resourceAttrs pdata.Attri
 
 	for _, d := range p.dimensions {
 		if v, ok := getDimensionValue(d, span.Attributes(), resourceAttrs); ok {
-			mkb.Append(v.StringVal())
+			mkb.Append(tracetranslator.AttributeValueToString(v))
 		}
 	}
 
@@ -579,7 +580,7 @@ func (p *processorImp) buildResourceAttrKey(serviceName string, resourceAttr pda
 
 	for _, ra := range p.resourceAttributes {
 		if attr, ok := resourceAttr.Get(ra.Name); ok {
-			rkb.Append(attr.StringVal())
+			rkb.Append(tracetranslator.AttributeValueToString(attr))
 		} else if ra.Default != nil {
 			// Set the default if configured, otherwise this metric should have no value set for the resource attribute.
 			rkb.Append(*ra.Default)
