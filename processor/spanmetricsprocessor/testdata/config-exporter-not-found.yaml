@@ -18,8 +18,7 @@ exporters:
 
   jaeger:
     endpoint: "localhost:14250"
-    tls:
-      insecure: true
+    insecure: true
 
   otlp:
     endpoint: "localhost:12345"

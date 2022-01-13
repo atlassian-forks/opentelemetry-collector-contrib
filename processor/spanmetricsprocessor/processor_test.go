@@ -704,7 +704,7 @@ func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metr
 		case notInSpanAttrName1:
 			assert.Fail(t, notInSpanAttrName1+" should not be in this metric")
 		default:
-			assert.Equal(t, wantDimensions[k], v)
+			assert.Equal(t, wantDimensions[k].StringVal(), v)
 			delete(wantDimensions, k)
 		}
 		return true
