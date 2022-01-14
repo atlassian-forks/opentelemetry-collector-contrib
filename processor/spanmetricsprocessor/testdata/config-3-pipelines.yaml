@@ -39,6 +39,7 @@ processors:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
     aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    attach_span_and_trace_id: false
 
 service:
   pipelines:

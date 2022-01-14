@@ -69,6 +69,10 @@ type Config struct {
 	// memory growing indefinitely over the lifetime of the collector.
 	// Optional. See defaultResourceAttributesCacheSize in processor.go for the default value.
 	ResourceAttributesCacheSize int `mapstructure:"resource_attributes_cache_size"`
+
+	// AttachSpanAndTraceID attaches span id and trace id to metrics generated from spans.
+	// The default value is set to `false`.
+	AttachSpanAndTraceID bool `mapstructure:"attach_span_and_trace_id"`
 }
 
 // GetAggregationTemporality converts the string value given in the config into a MetricAggregationTemporality.

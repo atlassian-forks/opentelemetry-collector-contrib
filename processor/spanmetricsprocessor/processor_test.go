@@ -87,6 +87,8 @@ type span struct {
 	operation  string
 	kind       pdata.SpanKind
 	statusCode pdata.StatusCode
+	spanID     pdata.SpanID
+	traceID    pdata.TraceID
 }
 
 func TestProcessorStart(t *testing.T) {
@@ -214,7 +216,7 @@ func TestProcessorConsumeTracesErrors(t *testing.T) {
 			tcon := &mocks.TracesConsumer{}
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(tc.consumeTracesErr)
 
-			p := newProcessorImp(mexp, tcon, nil, cumulative, t)
+			p := newProcessorImp(mexp, tcon, nil, cumulative, t, false)
 
 			traces := buildSampleTrace()
 
@@ -270,7 +272,7 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t)
+			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false)
 
 			for _, traces := range tc.traces {
 				// Test
@@ -291,7 +293,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 	testcases := []struct {
 		name                   string
 		aggregationTemporality string
-		verifier               func(t testing.TB, input pdata.Metrics) bool
+		verifier               func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool
 		traces                 []pdata.Traces
 	}{
 		{
@@ -330,14 +332,15 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			mexp := &mocks.MetricsExporter{}
 			tcon := &mocks.TracesConsumer{}
 
+			//TODO: CLAIRE: CHECK IF WE CAN ADD TO THESE TESTS
 			// Mocked metric exporter will perform validation on metrics, during p.ConsumeTraces()
 			mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-				return tc.verifier(t, input)
+				return tc.verifier(t, input, false, make(map[string]int))
 			})).Return(nil)
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t)
+			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false)
 
 			for _, traces := range tc.traces {
 				// Test
@@ -421,7 +424,7 @@ func TestResourceCopying(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
 
 	traces := buildSampleTrace()
 	traces.ResourceSpans().At(0).Resource().Attributes().Insert(resourceAttr1, pdata.NewAttributeValueString("1"))
@@ -435,6 +438,46 @@ func TestResourceCopying(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestProcessorConsumeTracesWithSpanAndTraceID(t *testing.T) {
+	// Prepare
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
+
+	traces := buildSampleTrace()
+
+	expectedSpanAndTraceIDs := make(map[string]int)
+	// grab all span ids and trace ids which we should expect to see in metrics
+	for i := 0; i < traces.ResourceSpans().Len(); i++ {
+		rspans := traces.ResourceSpans().At(i)
+		ilsSlice := rspans.InstrumentationLibrarySpans()
+		for j := 0; j < ilsSlice.Len(); j++ {
+			ils := ilsSlice.At(j)
+			spans := ils.Spans()
+			for k := 0; k < spans.Len(); k++ {
+				span := spans.At(k)
+				// we expect to see each trace id and span id twice, once for metric name "calls_total" and once for "latency"
+				expectedSpanAndTraceIDs[span.SpanID().HexString()] += 2
+				expectedSpanAndTraceIDs[span.TraceID().HexString()] += 2
+			}
+		}
+	}
+
+	defaultNullValue := "defaultNullValue"
+
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, true)
+
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		return verifyConsumeMetricsInputCumulative(t, input, p.attachSpanAndTraceID, expectedSpanAndTraceIDs)
+	})).Return(nil)
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, traces)
+	// Verify
+	assert.NoError(t, err)
+}
+
 func TestMetricKeyCache(t *testing.T) {
 	mexp := &mocks.MetricsExporter{}
 	tcon := &mocks.TracesConsumer{}
@@ -443,7 +486,7 @@ func TestMetricKeyCache(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
 
 	traces := buildSampleTrace()
 
@@ -476,7 +519,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, b)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, b, false)
 
 	traces := buildSampleTrace()
 
@@ -487,7 +530,7 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	}
 }
 
-func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string, temporality string, tb testing.TB) *processorImp {
+func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string, temporality string, tb testing.TB, attachSpanAndTraceID bool) *processorImp {
 	localDefaultNotInSpanAttrVal := defaultNotInSpanAttrVal
 	// use size 2 for LRU cache for testing purpose
 	metricKeyToDimensions, err := cache.NewCache(DimensionsCacheSize)
@@ -529,6 +572,7 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 			// Add a resource attribute to test "process" attributes like IP, host, region, cluster, etc.
 			{regionResourceAttrName, nil},
 		},
+		attachSpanAndTraceID: attachSpanAndTraceID,
 		resourceAttributes: []Dimension{
 			{resourceAttr1, nil},
 			{resourceAttr2, nil},
@@ -541,28 +585,28 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 }
 
 // verifyConsumeMetricsInputCumulative expects one accumulation of metrics, and marked as cumulative
-func verifyConsumeMetricsInputCumulative(t testing.TB, input pdata.Metrics) bool {
-	return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityCumulative, 1)
+func verifyConsumeMetricsInputCumulative(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+	return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityCumulative, 1, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 }
 
 // verifyConsumeMetricsInputDelta expects one accumulation of metrics, and marked as delta
-func verifyConsumeMetricsInputDelta(t testing.TB, input pdata.Metrics) bool {
-	return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityDelta, 1)
+func verifyConsumeMetricsInputDelta(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+	return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityDelta, 1, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 }
 
 // verifyMultipleCumulativeConsumptions expects the amount of accumulations as kept track of by numCumulativeConsumptions.
 // numCumulativeConsumptions acts as a multiplier for the values, since the cumulative metrics are additive.
-func verifyMultipleCumulativeConsumptions() func(t testing.TB, input pdata.Metrics) bool {
+func verifyMultipleCumulativeConsumptions() func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
 	numCumulativeConsumptions := 0
-	return func(t testing.TB, input pdata.Metrics) bool {
+	return func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
 		numCumulativeConsumptions++
-		return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityCumulative, numCumulativeConsumptions)
+		return verifyConsumeMetricsInput(t, input, pdata.AggregationTemporalityCumulative, numCumulativeConsumptions, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
 }
 
 // verifyConsumeMetricsInput verifies the input of the ConsumeMetrics call from this processor.
 // This is the best point to verify the computed metrics from spans are as expected.
-func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTemporality pdata.AggregationTemporality, numCumulativeConsumptions int) bool {
+func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTemporality pdata.AggregationTemporality, numCumulativeConsumptions int, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
 	require.Equal(t, 6, input.MetricCount(),
 		"Should be 3 for each of call count and latency. Each group of 3 metrics is made of: "+
 			"service-a (server kind) -> service-a (client kind) -> service-b (service kind)",
@@ -600,8 +644,10 @@ func verifyConsumeMetricsInput(t testing.TB, input pdata.Metrics, expectedTempor
 	mB := ilmB.At(0).Metrics()
 	require.Equal(t, 2, mB.Len())
 
-	verifyMetrics(mA, expectedTemporality, numCumulativeConsumptions, 2, t)
-	verifyMetrics(mB, expectedTemporality, numCumulativeConsumptions, 1, t)
+	verifyMetrics(mA, expectedTemporality, numCumulativeConsumptions, 2, t, attachSpanAndTraceID, expectedSpanAndTraceIDs)
+	verifyMetrics(mB, expectedTemporality, numCumulativeConsumptions, 1, t, attachSpanAndTraceID, expectedSpanAndTraceIDs)
+
+	assert.Empty(t, expectedSpanAndTraceIDs, "Did not see all expected span and trace IDs in metric. Missing: ", expectedSpanAndTraceIDs)
 
 	return true
 }
@@ -614,7 +660,7 @@ func getServiceName(m pdata.ResourceMetrics) (string, bool) {
 	return "", false
 }
 
-func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTemporality, numCumulativeConsumptions int, numOfCallCounts int, t testing.TB) {
+func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTemporality, numCumulativeConsumptions int, numOfCallCounts int, t testing.TB, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) {
 	seenMetricIDs := make(map[metricID]bool)
 	mi := 0
 	// The first <numOfCallCounts> metrics are for call counts.
@@ -633,7 +679,7 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTem
 		assert.NotZero(t, dp.StartTimestamp(), "StartTimestamp should be set")
 		assert.NotZero(t, dp.Timestamp(), "Timestamp should be set")
 
-		verifyMetricLabels(dp, t, seenMetricIDs)
+		verifyMetricLabels(dp, t, seenMetricIDs, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
 
 	seenMetricIDs = make(map[metricID]bool)
@@ -678,11 +724,11 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTem
 			}
 			assert.Equal(t, wantBucketCount, dp.BucketCounts()[bi])
 		}
-		verifyMetricLabels(dp, t, seenMetricIDs)
+		verifyMetricLabels(dp, t, seenMetricIDs, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
 }
 
-func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metricID]bool) {
+func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metricID]bool, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) {
 	mID := metricID{}
 	wantDimensions := map[string]pdata.AttributeValue{
 		stringAttrName:         pdata.NewAttributeValueString("stringAttrValue"),
@@ -705,6 +751,17 @@ func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metr
 			mID.statusCode = v
 		case notInSpanAttrName1:
 			assert.Fail(t, notInSpanAttrName1+" should not be in this metric")
+		case spanIDKey, traceIDKey:
+			if !attachSpanAndTraceID {
+				assert.Fail(t, v+" should not be in this metric. Span ID and Trace ID should only be attached when configuration option is set to.")
+			}
+			if _, exists := expectedSpanAndTraceIDs[v]; !exists {
+				assert.Fail(t, v+" should not be in this metric.")
+			}
+			expectedSpanAndTraceIDs[v]--
+			if expectedSpanAndTraceIDs[v] == 0 {
+				delete(expectedSpanAndTraceIDs, v)
+			}
 		default:
 			assert.Equal(t, tracetranslator.AttributeValueToString(wantDimensions[k]), v)
 			delete(wantDimensions, k)
@@ -733,11 +790,15 @@ func buildSampleTrace() pdata.Traces {
 					operation:  "/ping",
 					kind:       pdata.SpanKindServer,
 					statusCode: pdata.StatusCodeOk,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
 				},
 				{
 					operation:  "/ping",
 					kind:       pdata.SpanKindClient,
 					statusCode: pdata.StatusCodeOk,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
 				},
 			},
 		}, traces.ResourceSpans().AppendEmpty())
@@ -749,6 +810,8 @@ func buildSampleTrace() pdata.Traces {
 					operation:  "/ping",
 					kind:       pdata.SpanKindServer,
 					statusCode: pdata.StatusCodeError,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
 				},
 			},
 		}, traces.ResourceSpans().AppendEmpty())
@@ -784,7 +847,8 @@ func initSpan(span span, s pdata.Span) {
 	s.Attributes().InsertNull(nullAttrName)
 	s.Attributes().Insert(mapAttrName, pdata.NewAttributeValueMap())
 	s.Attributes().Insert(arrayAttrName, pdata.NewAttributeValueArray())
-	s.SetTraceID(pdata.NewTraceID([16]byte{byte(42)}))
+	s.SetSpanID(span.spanID)
+	s.SetTraceID(span.traceID)
 }
 
 func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExporter, component.TracesExporter) {
@@ -816,7 +880,7 @@ func TestBuildKeySameServiceOperationCharSequence(t *testing.T) {
 	ilSpan0 := rSpan0.InstrumentationLibrarySpans().AppendEmpty()
 	span0 := ilSpan0.Spans().AppendEmpty()
 	span0.SetName("c")
-	k0 := p.buildMetricKey(span0, pdata.NewAttributeMap())
+	k0 := p.buildMetricKey(span0, pdata.NewAttributeMap(), false)
 	rk0 := p.buildResourceAttrKey("ab", rSpan0.Resource().Attributes())
 
 	trace1 := pdata.NewTraces()
@@ -824,7 +888,7 @@ func TestBuildKeySameServiceOperationCharSequence(t *testing.T) {
 	ilSpan1 := rSpan1.InstrumentationLibrarySpans().AppendEmpty()
 	span1 := ilSpan1.Spans().AppendEmpty()
 	span1.SetName("bc")
-	k1 := p.buildMetricKey(span1, pdata.NewAttributeMap())
+	k1 := p.buildMetricKey(span1, pdata.NewAttributeMap(), false)
 	rk1 := p.buildResourceAttrKey("a", rSpan1.Resource().Attributes())
 
 	assert.NotEqual(t, k0, k1)
@@ -837,11 +901,12 @@ func TestBuildKeySameServiceOperationCharSequence(t *testing.T) {
 func TestBuildKeyWithDimensions(t *testing.T) {
 	defaultFoo := "bar"
 	for _, tc := range []struct {
-		name            string
-		optionalDims    []Dimension
-		resourceAttrMap map[string]pdata.AttributeValue
-		spanAttrMap     map[string]pdata.AttributeValue
-		wantKey         string
+		name                 string
+		optionalDims         []Dimension
+		resourceAttrMap      map[string]pdata.AttributeValue
+		spanAttrMap          map[string]pdata.AttributeValue
+		attachSpanAndTraceID bool
+		wantKey              string
 	}{
 		{
 			name:    "nil optionalDims",
@@ -894,6 +959,19 @@ func TestBuildKeyWithDimensions(t *testing.T) {
 			},
 			wantKey: "c\u0000SPAN_KIND_UNSPECIFIED\u0000STATUS_CODE_UNSET\u0000100",
 		},
+		{
+			name: "attributes should contain attributes + span and trace id",
+			optionalDims: []Dimension{
+				{Name: "foo", Default: &defaultFoo},
+			},
+			attachSpanAndTraceID: true,
+			wantKey:              "c\u0000SPAN_KIND_UNSPECIFIED\u0000STATUS_CODE_UNSET\u00000000000000000002\u000000000000000000000000000000000001\u0000bar",
+		},
+		{
+			name:                 "attributes should contain just span and trace id",
+			attachSpanAndTraceID: true,
+			wantKey:              "c\u0000SPAN_KIND_UNSPECIFIED\u0000STATUS_CODE_UNSET\u00000000000000000002\u000000000000000000000000000000000001",
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -913,7 +991,9 @@ func TestBuildKeyWithDimensions(t *testing.T) {
 			span0 := pdata.NewSpan()
 			pdata.NewAttributeMap().InitFromMap(tc.spanAttrMap).CopyTo(span0.Attributes())
 			span0.SetName("c")
-			k := p.buildMetricKey(span0, resAttr)
+			span0.SetSpanID(pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}))
+			span0.SetTraceID(pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}))
+			k := p.buildMetricKey(span0, resAttr, tc.attachSpanAndTraceID)
 
 			assert.Equal(t, metricKey(tc.wantKey), k)
 		})
@@ -1033,7 +1113,7 @@ func TestTraceWithoutServiceNameDoesNotGenerateMetrics(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t)
+	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false)
 
 	trace := pdata.NewTraces()
 
@@ -1214,9 +1294,13 @@ func TestBuildBuildMetricKey(t *testing.T) {
 	p, err := newProcessor(zap.NewNop(), cfg, next)
 	assert.NoError(t, err)
 
+	spanID := pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02})
+	traceID := pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01})
+
 	type args struct {
-		span    func() pdata.Span
-		attrMap map[string]pdata.AttributeValue
+		span                 func() pdata.Span
+		attrMap              map[string]pdata.AttributeValue
+		attachSpanAndTraceID bool
 	}
 	tests := []struct {
 		name string
@@ -1237,6 +1321,7 @@ func TestBuildBuildMetricKey(t *testing.T) {
 					"bar": pdata.NewAttributeValueString("bar_val"),
 					"baz": pdata.NewAttributeValueString("baz_val"),
 				},
+				attachSpanAndTraceID: false,
 			},
 			want: metricKey(fmt.Sprintf(
 				"spanA%sSPAN_KIND_SERVER%sSTATUS_CODE_UNSET%sbaz_val%sfoo_val",
@@ -1260,11 +1345,42 @@ func TestBuildBuildMetricKey(t *testing.T) {
 					"bar": pdata.NewAttributeValueString("bar_val"),
 					"foo": pdata.NewAttributeValueString("foo_val"),
 				},
+				attachSpanAndTraceID: false,
 			},
 			want: metricKey(fmt.Sprintf(
 				"spanA%sSPAN_KIND_CLIENT%sSTATUS_CODE_UNSET%sbaz_val%sfoo_val",
 				keybuilder.Separator,
 				keybuilder.Separator,
+				keybuilder.Separator,
+				keybuilder.Separator,
+			)),
+		},
+		{
+			name: "should build metric key in order",
+			args: args{
+				span: func() pdata.Span {
+					span := pdata.NewSpan()
+					span.SetName("spanA")
+					span.SetKind(pdata.SpanKindClient)
+					span.SetSpanID(spanID)
+					span.SetTraceID(traceID)
+					return span
+				},
+				attrMap: map[string]pdata.AttributeValue{
+					"baz": pdata.NewAttributeValueString("baz_val"),
+					"bar": pdata.NewAttributeValueString("bar_val"),
+					"foo": pdata.NewAttributeValueString("foo_val"),
+				},
+				attachSpanAndTraceID: true,
+			},
+			want: metricKey(fmt.Sprintf(
+				"spanA%sSPAN_KIND_CLIENT%sSTATUS_CODE_UNSET%s%s%s%s%sbaz_val%sfoo_val",
+				keybuilder.Separator,
+				keybuilder.Separator,
+				keybuilder.Separator,
+				spanID.HexString(),
+				keybuilder.Separator,
+				traceID.HexString(),
 				keybuilder.Separator,
 				keybuilder.Separator,
 			)),
@@ -1278,6 +1394,7 @@ func TestBuildBuildMetricKey(t *testing.T) {
 			if got := p.buildMetricKey(
 				tt.args.span(),
 				pdata.NewAttributeMap().InitFromMap(tt.args.attrMap),
+				tt.args.attachSpanAndTraceID,
 			); got != tt.want {
 				fmt.Println(got)
 				fmt.Println(tt.want)

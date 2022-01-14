@@ -70,6 +70,10 @@ The following settings can be optionally configured:
 
 - `resource_attributes_cache_size`: the max number of items in the `resource_key_to_dimensions_cache`. If not provided,
    will use default value size `1000`.
+
+- `attach_span_and_trace_id` attaches span id and trace id as attributes on metrics generated from spans if set to `true`. If not provided,
+  will use default value of `false`.
+
 ## Examples
 
 The following is a simple example usage of the spanmetrics processor.
@@ -101,6 +105,7 @@ processors:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
     latency_histogram_buckets: [100us, 1ms, 2ms, 6ms, 10ms, 100ms, 250ms]
+    attach_span_and_trace_id: true
     dimensions:
       - name: http.method
         default: GET
