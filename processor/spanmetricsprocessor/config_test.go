@@ -46,6 +46,7 @@ func TestLoadConfig(t *testing.T) {
 		wantResourceAttributes                []Dimension
 		wantResourceAttributesCacheSize       int
 		wantAggregationTemporality            string
+		wantAttachSpanAndTraceID              bool
 		wantInheritInstrumentationLibraryName bool
 	}{
 		{
@@ -54,6 +55,7 @@ func TestLoadConfig(t *testing.T) {
 			wantAggregationTemporality:            cumulative,
 			wantDimensionsCacheSize:               500,
 			wantResourceAttributesCacheSize:       300,
+			wantAttachSpanAndTraceID:              true,
 			wantInheritInstrumentationLibraryName: true,
 		},
 		{
@@ -62,6 +64,7 @@ func TestLoadConfig(t *testing.T) {
 			wantAggregationTemporality:            cumulative,
 			wantDimensionsCacheSize:               defaultDimensionsCacheSize,
 			wantResourceAttributesCacheSize:       defaultResourceAttributesCacheSize,
+			wantAttachSpanAndTraceID:              false,
 			wantInheritInstrumentationLibraryName: false,
 		},
 		{
@@ -87,6 +90,7 @@ func TestLoadConfig(t *testing.T) {
 			},
 			wantResourceAttributesCacheSize:       3000,
 			wantAggregationTemporality:            delta,
+			wantAttachSpanAndTraceID:              false,
 			wantInheritInstrumentationLibraryName: false,
 		},
 	}
@@ -116,14 +120,15 @@ func TestLoadConfig(t *testing.T) {
 			require.NotNil(t, cfg)
 			assert.Equal(t,
 				&Config{
-					ProcessorSettings:           config.NewProcessorSettings(config.NewID(typeStr)),
-					MetricsExporter:             tc.wantMetricsExporter,
-					LatencyHistogramBuckets:     tc.wantLatencyHistogramBuckets,
-					Dimensions:                  tc.wantDimensions,
-					DimensionsCacheSize:         tc.wantDimensionsCacheSize,
-					ResourceAttributes:          tc.wantResourceAttributes,
-					ResourceAttributesCacheSize: tc.wantResourceAttributesCacheSize,
-					AggregationTemporality:      tc.wantAggregationTemporality,
+					ProcessorSettings:                 config.NewProcessorSettings(config.NewID(typeStr)),
+					MetricsExporter:                   tc.wantMetricsExporter,
+					LatencyHistogramBuckets:           tc.wantLatencyHistogramBuckets,
+					Dimensions:                        tc.wantDimensions,
+					DimensionsCacheSize:               tc.wantDimensionsCacheSize,
+					ResourceAttributes:                tc.wantResourceAttributes,
+					ResourceAttributesCacheSize:       tc.wantResourceAttributesCacheSize,
+					AggregationTemporality:            tc.wantAggregationTemporality,
+					AttachSpanAndTraceID:              tc.wantAttachSpanAndTraceID,
 					InheritInstrumentationLibraryName: tc.wantInheritInstrumentationLibraryName,
 				},
 				cfg.Processors[config.NewID(typeStr)],

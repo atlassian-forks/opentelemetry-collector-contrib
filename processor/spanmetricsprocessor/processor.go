@@ -44,7 +44,8 @@ const (
 	operationKey               = "operation"   // OpenTelemetry non-standard constant.
 	spanKindKey                = "span.kind"   // OpenTelemetry non-standard constant.
 	statusCodeKey              = "status.code" // OpenTelemetry non-standard constant.
-	traceIDKey                 = "trace_id"
+	traceIDKey                 = "trace.id"
+	spanIDKey                  = "span.id"
 
 	defaultDimensionsCacheSize         = 1000
 	defaultResourceAttributesCacheSize = 1000
@@ -109,6 +110,9 @@ type processorImp struct {
 	// An LRU cache of resourceattributekey-value maps keyed by a unique identifier formed by a concatenation of its values.
 	resourceKeyToDimensions *cache.Cache
 
+	// Defines whether metrics generated from spans should attach span and trace id as dimensions.
+	attachSpanAndTraceID bool
+
 	// Defines whether metrics should inherit instrumentation library name from span
 	inheritInstrumentationLibraryName bool
 }
@@ -127,7 +131,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		}
 	}
 
-	if err := validateDimensions(pConfig.Dimensions, []string{serviceNameKey, spanKindKey, statusCodeKey}); err != nil {
+	if err := validateDimensions(pConfig.Dimensions, []string{spanKindKey, statusCodeKey}); err != nil {
 		return nil, err
 	}
 	if err := validateDimensions(pConfig.ResourceAttributes, []string{serviceNameKey}); err != nil {
@@ -159,6 +163,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		resourceAttributes:                pConfig.ResourceAttributes,
 		resourceKeyToDimensions:           resourceKeyToDimensionsCache,
 		metricKeyToDimensions:             metricKeyToDimensionsCache,
+		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 	}, nil
 }
@@ -451,7 +456,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
-	mKey := p.buildMetricKey(span, resourceAttr)
+	mKey := p.buildMetricKey(span, resourceAttr, p.attachSpanAndTraceID)
 	resourceAttrKey := p.buildResourceAttrKey(serviceName, resourceAttr)
 
 	p.cacheMetricKey(span, mKey, resourceAttr)
@@ -555,12 +560,17 @@ func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, la
 	p.latencyCount[rKey][instrLibName][mKey]++
 }
 
-func (p *processorImp) buildDimensionKVs(span pdata.Span, optionalDims []Dimension, resourceAttrs pdata.AttributeMap) pdata.AttributeMap {
+func (p *processorImp) buildDimensionKVs(span pdata.Span, optionalDims []Dimension, resourceAttrs pdata.AttributeMap, attachSpanAndTraceID bool) pdata.AttributeMap {
 	dims := pdata.NewAttributeMap()
 
 	dims.UpsertString(operationKey, span.Name())
 	dims.UpsertString(spanKindKey, span.Kind().String())
 	dims.UpsertString(statusCodeKey, span.Status().Code().String())
+
+	if attachSpanAndTraceID {
+		dims.UpsertString(spanIDKey, span.SpanID().HexString())
+		dims.UpsertString(traceIDKey, span.TraceID().HexString())
+	}
 	for _, d := range optionalDims {
 		if v, ok := getDimensionValue(d, span.Attributes(), resourceAttrs); ok {
 			dims.Upsert(d.Name, v)
@@ -588,13 +598,20 @@ func extractResourceAttrsByKeys(serviceName string, keys []Dimension, resourceAt
 // or resource attributes. If the dimension exists in both, the span's attributes, being the most specific, takes precedence.
 //
 // The metric key is a simple concatenation of dimension values, delimited by a null character.
-func (p *processorImp) buildMetricKey(span pdata.Span, resourceAttrs pdata.AttributeMap) metricKey {
+func (p *processorImp) buildMetricKey(span pdata.Span, resourceAttrs pdata.AttributeMap, attachSpanAndTraceID bool) metricKey {
 	mkb := keybuilder.New()
 	mkb.Append(
 		span.Name(),
 		span.Kind().String(),
 		span.Status().Code().String(),
 	)
+
+	if attachSpanAndTraceID {
+		mkb.Append(
+			span.SpanID().HexString(),
+			span.TraceID().HexString(),
+		)
+	}
 
 	for _, d := range p.dimensions {
 		if v, ok := getDimensionValue(d, span.Attributes(), resourceAttrs); ok {
@@ -656,7 +673,7 @@ func getDimensionValue(d Dimension, spanAttr pdata.AttributeMap, resourceAttr pd
 // This enables a lookup of the dimension key-value map when constructing the metric like so:
 // LabelsMap().InitFromMap(p.metricKeyToDimensions[key])
 func (p *processorImp) cacheMetricKey(span pdata.Span, k metricKey, resourceAttrs pdata.AttributeMap) {
-	p.metricKeyToDimensions.ContainsOrAdd(k, p.buildDimensionKVs(span, p.dimensions, resourceAttrs))
+	p.metricKeyToDimensions.ContainsOrAdd(k, p.buildDimensionKVs(span, p.dimensions, resourceAttrs, p.attachSpanAndTraceID))
 }
 
 // cache the dimension key-value map for the resourceAttrKey if there is a cache miss.

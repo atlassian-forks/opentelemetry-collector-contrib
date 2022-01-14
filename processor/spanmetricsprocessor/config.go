@@ -70,6 +70,10 @@ type Config struct {
 	// Optional. See defaultResourceAttributesCacheSize in processor.go for the default value.
 	ResourceAttributesCacheSize int `mapstructure:"resource_attributes_cache_size"`
 
+	// AttachSpanAndTraceID attaches span id and trace id to metrics generated from spans.
+	// The default value is set to `false`.
+	AttachSpanAndTraceID bool `mapstructure:"attach_span_and_trace_id"`
+
 	// InheritInstrumentationLibraryName defines whether metrics generated from spans should inherit
 	// the instrumentation library name from the span.
 	// Optional. The default value is `false` which will define the instrumentation library name on metrics as `spanmetricsprocessor`.

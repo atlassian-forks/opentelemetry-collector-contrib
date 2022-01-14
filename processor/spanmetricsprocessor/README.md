@@ -71,7 +71,10 @@ The following settings can be optionally configured:
 - `resource_attributes_cache_size`: the max number of items in the `resource_key_to_dimensions_cache`. If not provided,
    will use default value size `1000`.
 
-- `inherit_instrumentation_library_name`: defines whether the metrics generated from spans should inherit the same instrumentation library name as the span. If not provided, will use default value of `false` which will define the instrumentation library name as `spanmetricsprocessor` on metrics.
+- `attach_span_and_trace_id` attaches span id and trace id as attributes on metrics generated from spans if set to `true`. If not provided,
+  will use default value of `false`.
+
+  - `inherit_instrumentation_library_name`: defines whether the metrics generated from spans should inherit the same instrumentation library name as the span. If not provided, will use default value of `false` which will define the instrumentation library name as `spanmetricsprocessor` on metrics.
 
 ## Examples
 
@@ -104,6 +107,7 @@ processors:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
     latency_histogram_buckets: [100us, 1ms, 2ms, 6ms, 10ms, 100ms, 250ms]
+    attach_span_and_trace_id: true
     dimensions:
       - name: http.method
         default: GET
