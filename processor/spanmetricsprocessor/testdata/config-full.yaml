@@ -20,7 +20,6 @@ receivers:
 exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
-    namespace: promexample
 
   jaeger:
     endpoint: "localhost:14250"
@@ -34,7 +33,8 @@ processors:
   batch:
   spanmetrics:
     metrics_exporter: otlp/spanmetrics
-    latency_histogram_buckets: [2ms, 6ms, 10ms, 100ms, 250ms]
+    latency_histogram_buckets: [100us, 1ms, 2ms, 6ms, 10ms, 100ms, 250ms]
+    dimensions_cache_size: 1500
 
     # Additional list of dimensions on top of:
     # - service.name
@@ -46,16 +46,30 @@ processors:
       # If the span is missing http.method, the processor will insert
       # the http.method dimension with value 'GET'.
       # For example, in the following scenario, http.method is not present in a span and so will be added as a dimension to the metric with value "GET":
-      # - promexample_calls{http_method="GET",operation="/Address",service_name="shippingservice",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_UNSET"} 1
+      # - calls{http_method="GET",operation="/Address",service_name="shippingservice",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_UNSET"} 1
       - name: http.method
         default: GET
 
       # If a default is not provided, the http.status_code dimension will be omitted
       # if the span does not contain http.status_code.
       # For example, consider a scenario with two spans, one span having http.status_code=200 and another missing http.status_code. Two metrics would result with this configuration, one with the http_status_code omitted and the other included:
-      # - promexample_calls{http_status_code="200",operation="/Address",service_name="shippingservice",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_UNSET"} 1
-      # - promexample_calls{operation="/Address",service_name="shippingservice",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_UNSET"} 1
+      # - calls{http_status_code="200",operation="/Address",service_name="shippingservice",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_UNSET"} 1
+      # - calls{operation="/Address",service_name="shippingservice",span_kind="SPAN_KIND_SERVER",status_code="STATUS_CODE_UNSET"} 1
       - name: http.status_code
+
+    # the max number of items in the `resource_key_to_dimensions_cache`. Default is 1000
+    resource_attributes_cache_size: 3000
+    # the list of resource attributes to add together with the default resource attributes defined
+    # above. Each additional resource attribute is defined with a `name` which is looked up in the span's collection of
+    # resource attributes. If the `name`d resource attribute is missing in the span, the optional provided `default` is
+    # used. If no `default` is provided, this resource attribute will be **omitted** from the metric.
+    resource_attributes:
+      - name: region
+        default: us-east-1
+      - name: host_id
+    # The aggregation temporality of the generated metrics.
+    # Default: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"
 
 service:
   pipelines:
