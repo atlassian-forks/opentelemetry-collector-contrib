@@ -435,6 +435,14 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
+	p.logger.Error("This is the latency", zap.Float64("latencyInMilliseconds", latencyInMilliseconds))
+	p.logger.Error("This is the index", zap.Int("latencyInMilliseconds", index))
+	// index := sort.Search(len(p.latencyBounds), func(i int) bool { return p.latencyBounds[i] >= latencyInMilliseconds })
+
+	// // adjust to
+	// if index >= len(p.latencyBounds) {
+	// 	index = len(p.latencyBounds) - 1
+	// }
 
 	mKey := p.buildMetricKey(span, resourceAttr, p.attachSpanAndTraceID)
 	resourceAttrKey := p.buildResourceAttrKey(serviceName, resourceAttr)
