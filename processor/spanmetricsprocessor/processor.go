@@ -441,6 +441,7 @@ func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Sp
 	p.logger.Error("This is the start time stamp", zap.Float64("start_tss", float64(span.StartTimestamp())))
 
 	p.logger.Error("This is the end timestamp", zap.Float64("end_tss", float64(span.EndTimestamp())))
+	p.logger.Error("This is the array", zap.Any("array bounds", p.latencyBounds))
 	// 16804269841429.922
 	// index := sort.Search(len(p.latencyBounds), func(i int) bool { return p.latencyBounds[i] >= latencyInMilliseconds })
 
