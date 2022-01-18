@@ -118,7 +118,8 @@ processors:
         default: us-east-1
       - name: host_id
     resource_attributes_cache_size: 1000
-    aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"     
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"    
+    inherit_instrumentation_library_name: true 
 
 exporters:
   jaeger:
