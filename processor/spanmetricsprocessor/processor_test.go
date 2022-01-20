@@ -360,7 +360,12 @@ func TestInheritInstrumentationLibraryName(t *testing.T) {
 	tcon := &mocks.TracesConsumer{}
 
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-		rmA, rmB := extractResourceMetricsHelper(t, input)
+		rm := input.ResourceMetrics()
+		require.Equal(t, 2, rm.Len())
+		rmA := findResourceMetricsHelper(t, rm, "service-a")
+		assert.NotEmpty(t, rmA, "resource metric containing service name `service-a` not found")
+		rmB := findResourceMetricsHelper(t, rm, "service-b")
+		assert.NotEmpty(t, rmB, "resource metric containing service name `service-b` not found")
 
 		assert.Equal(t, "service-a-instrumentation-library", rmA.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
 		assert.Equal(t, "service-b-instrumentation-library", rmB.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
@@ -388,7 +393,12 @@ func TestDefaultInstrumentationLibraryName(t *testing.T) {
 	tcon := &mocks.TracesConsumer{}
 
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-		rmA, rmB := extractResourceMetricsHelper(t, input)
+		rm := input.ResourceMetrics()
+		require.Equal(t, 2, rm.Len())
+		rmA := findResourceMetricsHelper(t, rm, "service-a")
+		assert.NotEmpty(t, rmA, "resource metric containing service name `service-a` not found")
+		rmB := findResourceMetricsHelper(t, rm, "service-b")
+		assert.NotEmpty(t, rmB, "resource metric containing service name `service-b` not found")
 		assert.Equal(t, instrumentationLibraryName, rmA.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
 		assert.Equal(t, instrumentationLibraryName, rmB.InstrumentationLibraryMetrics().At(0).InstrumentationLibrary().Name())
 
@@ -426,13 +436,30 @@ func extractResourceMetricsHelper(t *testing.T, input pdata.Metrics) (pdata.Reso
 	return rm1, rm0
 }
 
+func findResourceMetricsHelper(t *testing.T, rm pdata.ResourceMetricsSlice, serviceNameExpected string) pdata.ResourceMetrics {
+	for i := 0; i < rm.Len(); i++ {
+		serviceName, ok := getServiceName(rm.At(i))
+		assert.True(t, ok, "resourceMetrics should always have service name")
+		if serviceName == serviceNameExpected {
+			return rm.At(i)
+		}
+	}
+
+	return pdata.ResourceMetrics{}
+}
+
 func TestResourceCopying(t *testing.T) {
 	// Prepare
 	mexp := &mocks.MetricsExporter{}
 	tcon := &mocks.TracesConsumer{}
 
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-		rmA, rmB := extractResourceMetricsHelper(t, input)
+		rm := input.ResourceMetrics()
+		require.Equal(t, 2, rm.Len())
+		rmA := findResourceMetricsHelper(t, rm, "service-a")
+		assert.NotEmpty(t, rmA, "resource metric containing service name `service-a` not found")
+		rmB := findResourceMetricsHelper(t, rm, "service-b")
+		assert.NotEmpty(t, rmB, "resource metric containing service name `service-b` not found")
 
 		require.Equal(t, 4, rmA.Resource().Attributes().Len())
 		require.Equal(t, 2, rmA.InstrumentationLibraryMetrics().At(0).Metrics().Len())

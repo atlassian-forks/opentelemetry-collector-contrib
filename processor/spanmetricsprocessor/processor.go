@@ -65,6 +65,12 @@ type exemplarData struct {
 	value   float64
 }
 
+type aggregationMeta struct {
+	serviceName string
+	instrLibName instrLibKey
+	resourceAttr pdata.AttributeMap
+}
+
 // metricKey is used to carry the stringified metric attributes
 type metricKey string
 
@@ -436,7 +442,7 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 	for j := 0; j < ilsSlice.Len(); j++ {
 		ils := ilsSlice.At(j)
 
-		// if confing is set to inherit instrumentation library name, then assume from trace
+		// if config is set to inherit instrumentation library name, then assume from trace
 		// otherwise use default
 		if p.inheritInstrumentationLibraryName {
 			instrLibName = instrLibKey(ils.InstrumentationLibrary().Name())
@@ -445,38 +451,43 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 		spans := ils.Spans()
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
-			p.aggregateMetricsForSpan(serviceName, span, rspans.Resource().Attributes(), instrLibName)
+			aggrMeta := aggregationMeta{
+				serviceName: serviceName,
+				resourceAttr: rspans.Resource().Attributes(),
+				instrLibName: instrLibName,
+			}
+			p.aggregateMetricsForSpan(span, aggrMeta)
 		}
 	}
 }
 
-func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Span, resourceAttr pdata.AttributeMap, instrLibName instrLibKey) {
+func (p *processorImp) aggregateMetricsForSpan(span pdata.Span, aggregationMeta aggregationMeta) {
 	latencyInMilliseconds := float64(span.EndTimestamp()-span.StartTimestamp()) / float64(time.Millisecond.Nanoseconds())
 
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
-	mKey := p.buildMetricKey(span, resourceAttr, p.attachSpanAndTraceID)
-	resourceAttrKey := p.buildResourceAttrKey(serviceName, resourceAttr)
+	mKey := p.buildMetricKey(span, aggregationMeta.resourceAttr, p.attachSpanAndTraceID)
+	resourceAttrKey := p.buildResourceAttrKey(aggregationMeta.serviceName, aggregationMeta.resourceAttr)
 
-	p.cacheMetricKey(span, mKey, resourceAttr)
-	p.cacheResourceAttrKey(serviceName, resourceAttr, resourceAttrKey)
-	p.updateCallMetrics(resourceAttrKey, mKey, instrLibName)
-	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index, instrLibName)
-	p.updateLatencyExemplars(resourceAttrKey, mKey, latencyInMilliseconds, span.TraceID(), instrLibName)
+	p.cacheMetricKey(span, mKey, aggregationMeta.resourceAttr)
+	p.cacheResourceAttrKey(aggregationMeta.serviceName, aggregationMeta.resourceAttr, resourceAttrKey)
+	p.updateCallMetrics(resourceAttrKey, mKey, aggregationMeta.instrLibName)
+	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index, aggregationMeta.instrLibName)
+	p.updateLatencyExemplars(resourceAttrKey, mKey, latencyInMilliseconds, span.TraceID(), aggregationMeta.instrLibName)
 }
 
 // updateCallMetrics increments the call count for the given metric key.
-func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, instrLibName instrLibKey) {
+func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, iKey instrLibKey) {
 	if _, ok := p.callSum[rKey]; !ok {
 		p.callSum[rKey] = make(map[instrLibKey]map[metricKey]int64)
 	}
 
-	if _, ok := p.callSum[rKey][instrLibName]; !ok {
-		p.callSum[rKey][instrLibName] = make(map[metricKey]int64)
+	if _, ok := p.callSum[rKey][iKey]; !ok {
+		p.callSum[rKey][iKey] = make(map[metricKey]int64)
 	}
 
-	p.callSum[rKey][instrLibName][mKey]++
+	p.callSum[rKey][iKey][mKey]++
 }
 
 func (p *processorImp) reset() {
