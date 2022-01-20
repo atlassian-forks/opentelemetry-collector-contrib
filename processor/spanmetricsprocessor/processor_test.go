@@ -420,22 +420,6 @@ func TestDefaultInstrumentationLibraryName(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func extractResourceMetricsHelper(t *testing.T, input pdata.Metrics) (pdata.ResourceMetrics, pdata.ResourceMetrics) {
-	rm := input.ResourceMetrics()
-	require.Equal(t, 2, rm.Len())
-
-	rm0 := rm.At(0)
-	rm1 := rm.At(1)
-	serviceName, ok := getServiceName(rm0)
-	assert.True(t, ok, "should get service name from resourceMetric")
-
-	if serviceName == "service-a" {
-		return rm0, rm1
-	}
-
-	return rm1, rm0
-}
-
 func findResourceMetricsHelper(t *testing.T, rm pdata.ResourceMetricsSlice, serviceNameExpected string) pdata.ResourceMetrics {
 	for i := 0; i < rm.Len(); i++ {
 		serviceName, ok := getServiceName(rm.At(i))
