@@ -308,9 +308,9 @@ func TestProcessorConsumeTraces(t *testing.T) {
 					startTime:  pdata.TimestampFromTime(time.Time{}),
 					// maximum seconds value that can be held by time.Time.
 					// Get maximum 64 int by shifting left by 1 and then taking the complement
-					// time.Unix adds (1969*365 + 1969/4 - 1969/100 + 1969/400) * 86400 == 62135638488 to the input value (see internal implementation) so we have to subtract that
+					// time.Unix adds 62135596800 to the input value (see internal implementation) so we have to subtract that
 					// to get the maximum value that time.Unix can take.
-					endTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135638488, 0)),
+					endTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135596800, 0)),
 				},
 				{
 					operation:  "/ping",
@@ -319,7 +319,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
 					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
 					// maximum seconds value held by time.Time as explained above.
-					startTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135638488, 0)),
+					startTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135596800, 0)),
 					endTime:   pdata.TimestampFromTime(time.Time{}),
 				},
 			},
