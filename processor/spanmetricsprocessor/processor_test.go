@@ -234,6 +234,65 @@ func TestProcessorConsumeTracesErrors(t *testing.T) {
 }
 
 func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
+	testcases := []struct {
+		name                   string
+		aggregationTemporality string
+		traces                 []pdata.Traces
+	}{
+		{
+			name:                   "Test single consumption, three spans (Cumulative).",
+			aggregationTemporality: cumulative,
+			traces:                 []pdata.Traces{buildSampleTrace()},
+		},
+		{
+			name:                   "Test single consumption, three spans (Delta).",
+			aggregationTemporality: delta,
+			traces:                 []pdata.Traces{buildSampleTrace()},
+		},
+		{
+			// More consumptions, should accumulate additively.
+			name:                   "Test two consumptions (Cumulative).",
+			aggregationTemporality: cumulative,
+			traces:                 []pdata.Traces{buildSampleTrace(), buildSampleTrace()},
+		},
+		{
+			// More consumptions, should not accumulate. Therefore, end state should be the same as single consumption case.
+			name:                   "Test two consumptions (Delta).",
+			aggregationTemporality: delta,
+			traces:                 []pdata.Traces{buildSampleTrace(), buildSampleTrace()},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Prepare
+			mexp := &mocks.MetricsExporter{}
+			tcon := &mocks.TracesConsumer{}
+
+			mexp.On("ConsumeMetrics", mock.Anything, mock.Anything).Return(nil)
+			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+			defaultNullValue := "defaultNullValue"
+			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false, false)
+
+			for _, traces := range tc.traces {
+				// Test
+				traces := traces
+				// create an excessive concurrent usage. The processor will not be used in this way practically.
+				// Run the test to verify this public function ConsumeTraces() doesn't cause race conditions.
+				go func() {
+					ctx := metadata.NewIncomingContext(context.Background(), nil)
+					err := p.ConsumeTraces(ctx, traces)
+					assert.NoError(t, err)
+				}()
+			}
+		})
+	}
+}
+
+func TestProcessorConsumeTraces(t *testing.T) {
 	spanWithLargeTimestamp := pdata.NewTraces()
 	initServiceSpans(
 		serviceSpans{
@@ -269,70 +328,6 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 	testcases := []struct {
 		name                   string
 		aggregationTemporality string
-		traces                 []pdata.Traces
-	}{
-		{
-			name:                   "Test single consumption, three spans (Cumulative).",
-			aggregationTemporality: cumulative,
-			traces:                 []pdata.Traces{buildSampleTrace()},
-		},
-		{
-			name:                   "Test single consumption, three spans (Delta).",
-			aggregationTemporality: delta,
-			traces:                 []pdata.Traces{buildSampleTrace()},
-		},
-		{
-			// More consumptions, should accumulate additively.
-			name:                   "Test two consumptions (Cumulative).",
-			aggregationTemporality: cumulative,
-			traces:                 []pdata.Traces{buildSampleTrace(), buildSampleTrace()},
-		},
-		{
-			// More consumptions, should not accumulate. Therefore, end state should be the same as single consumption case.
-			name:                   "Test two consumptions (Delta).",
-			aggregationTemporality: delta,
-			traces:                 []pdata.Traces{buildSampleTrace(), buildSampleTrace()},
-		},
-		{
-			name:                   "Test maximum span time will not cause out of bounds index error",
-			aggregationTemporality: delta,
-			traces:                 []pdata.Traces{spanWithLargeTimestamp},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			// Prepare
-			mexp := &mocks.MetricsExporter{}
-			tcon := &mocks.TracesConsumer{}
-
-			mexp.On("ConsumeMetrics", mock.Anything, mock.Anything).Return(nil)
-			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
-
-			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false, false)
-
-			for _, traces := range tc.traces {
-				// Test
-				traces := traces
-				// create an excessive concurrent usage. The processor will not be used in this way practically.
-				// Run the test to verify this public function ConsumeTraces() doesn't cause race conditions.
-				go func() {
-					ctx := metadata.NewIncomingContext(context.Background(), nil)
-					err := p.ConsumeTraces(ctx, traces)
-					assert.NoError(t, err)
-				}()
-			}
-		})
-	}
-}
-
-func TestProcessorConsumeTraces(t *testing.T) {
-	testcases := []struct {
-		name                   string
-		aggregationTemporality string
 		verifier               func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool
 		traces                 []pdata.Traces
 	}{
@@ -362,6 +357,11 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			verifier:               verifyConsumeMetricsInputDelta,
 			traces:                 []pdata.Traces{buildSampleTrace(), buildSampleTrace()},
 		},
+		{
+			name:                   "Test maximum span time will not cause out of bounds index error",
+			aggregationTemporality: delta,
+			traces:                 []pdata.Traces{spanWithLargeTimestamp},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -372,7 +372,6 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			mexp := &mocks.MetricsExporter{}
 			tcon := &mocks.TracesConsumer{}
 
-			//TODO: CLAIRE: CHECK IF WE CAN ADD TO THESE TESTS
 			// Mocked metric exporter will perform validation on metrics, during p.ConsumeTraces()
 			mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
 				return tc.verifier(t, input, false, make(map[string]int))
