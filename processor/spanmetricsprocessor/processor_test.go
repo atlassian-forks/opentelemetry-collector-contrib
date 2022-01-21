@@ -899,8 +899,9 @@ func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metr
 //       service-b/ping (server)
 func buildSampleTrace() pdata.Traces {
 	traces := pdata.NewTraces()
-	spanStartTime := pdata.TimestampFromTime(time.Now())
-	spanEndTime := pdata.TimestampFromTime(time.Now().Add(sampleLatencyDuration))
+	now := time.Now()
+	spanStartTime := pdata.TimestampFromTime(now)
+	spanEndTime := pdata.TimestampFromTime(now.Add(sampleLatencyDuration))
 
 	initServiceSpans(
 		serviceSpans{
