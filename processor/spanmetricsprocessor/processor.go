@@ -65,11 +65,20 @@ type exemplarData struct {
 	value   float64
 }
 
+type aggregationMeta struct {
+	serviceName string
+	instrLibName instrLibKey
+	resourceAttr pdata.AttributeMap
+}
+
 // metricKey is used to carry the stringified metric attributes
 type metricKey string
 
 // resourceKey is used to carry the stringified resource attributes
 type resourceKey string
+
+// instrLibKey is used to carry the stringified instrumentation library name
+type instrLibKey string
 
 type processorImp struct {
 	// ConsumeTraces() of each instance might be called concurrently from its upstream component in the pipeline.
@@ -92,14 +101,14 @@ type processorImp struct {
 	startTime time.Time
 
 	// Call & Error counts.
-	callSum map[resourceKey]map[metricKey]int64
+	callSum map[resourceKey]map[instrLibKey]map[metricKey]int64
 
 	// Latency histogram.
-	latencyCount         map[resourceKey]map[metricKey]uint64
-	latencySum           map[resourceKey]map[metricKey]float64
-	latencyBucketCounts  map[resourceKey]map[metricKey][]uint64
+	latencyCount         map[resourceKey]map[instrLibKey]map[metricKey]uint64
+	latencySum           map[resourceKey]map[instrLibKey]map[metricKey]float64
+	latencyBucketCounts  map[resourceKey]map[instrLibKey]map[metricKey][]uint64
 	latencyBounds        []float64
-	latencyExemplarsData map[resourceKey]map[metricKey][]exemplarData
+	latencyExemplarsData map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData
 
 	// An LRU cache of dimension key-value maps keyed by a unique identifier formed by a concatenation of its values:
 	// e.g. { "foo/barOK": { "serviceName": "foo", "operation": "/bar", "status_code": "OK" }}
@@ -109,6 +118,9 @@ type processorImp struct {
 
 	// Defines whether metrics generated from spans should attach span and trace id as dimensions.
 	attachSpanAndTraceID bool
+
+	// Defines whether metrics should inherit instrumentation library name from span
+	inheritInstrumentationLibraryName bool
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -143,21 +155,22 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 	}
 
 	return &processorImp{
-		logger:                  logger,
-		config:                  *pConfig,
-		startTime:               time.Now(),
-		callSum:                 make(map[resourceKey]map[metricKey]int64),
-		latencyBounds:           bounds,
-		latencySum:              make(map[resourceKey]map[metricKey]float64),
-		latencyCount:            make(map[resourceKey]map[metricKey]uint64),
-		latencyBucketCounts:     make(map[resourceKey]map[metricKey][]uint64),
-		latencyExemplarsData:    make(map[resourceKey]map[metricKey][]exemplarData),
-		nextConsumer:            nextConsumer,
-		dimensions:              pConfig.Dimensions,
-		resourceAttributes:      pConfig.ResourceAttributes,
-		resourceKeyToDimensions: resourceKeyToDimensionsCache,
-		metricKeyToDimensions:   metricKeyToDimensionsCache,
-		attachSpanAndTraceID:    pConfig.AttachSpanAndTraceID,
+		logger:                            logger,
+		config:                            *pConfig,
+		startTime:                         time.Now(),
+		callSum:                           make(map[resourceKey]map[instrLibKey]map[metricKey]int64),
+		latencyBounds:                     bounds,
+		latencySum:                        make(map[resourceKey]map[instrLibKey]map[metricKey]float64),
+		latencyCount:                      make(map[resourceKey]map[instrLibKey]map[metricKey]uint64),
+		latencyBucketCounts:               make(map[resourceKey]map[instrLibKey]map[metricKey][]uint64),
+		latencyExemplarsData:              make(map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData),
+		nextConsumer:                      nextConsumer,
+		dimensions:                        pConfig.Dimensions,
+		resourceAttributes:                pConfig.ResourceAttributes,
+		resourceKeyToDimensions:           resourceKeyToDimensionsCache,
+		metricKeyToDimensions:             metricKeyToDimensionsCache,
+		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
+		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 	}, nil
 }
 
@@ -303,20 +316,17 @@ func (p *processorImp) buildMetrics() (*pdata.Metrics, error) {
 			return true
 		})
 
-		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
-		ilm.InstrumentationLibrary().SetName(instrumentationLibraryName)
-
 		// build metrics per resource
 		resourceAttrKey, ok := key.(resourceKey)
 		if !ok {
 			return nil, errors.New("resource key type assertion failed")
 		}
 
-		if err := p.collectCallMetrics(ilm, resourceAttrKey); err != nil {
+		if err := p.collectCallMetrics(rm, resourceAttrKey); err != nil {
 			return nil, err
 		}
 
-		if err := p.collectLatencyMetrics(ilm, resourceAttrKey); err != nil {
+		if err := p.collectLatencyMetrics(rm, resourceAttrKey); err != nil {
 			return nil, err
 		}
 
@@ -326,64 +336,72 @@ func (p *processorImp) buildMetrics() (*pdata.Metrics, error) {
 
 // collectLatencyMetrics collects the raw latency metrics, writing the data
 // into the given instrumentation library metrics.
-func (p *processorImp) collectLatencyMetrics(ilm pdata.InstrumentationLibraryMetrics, resAttrKey resourceKey) error {
-	for mKey := range p.latencyCount[resAttrKey] {
-		mLatency := ilm.Metrics().AppendEmpty()
-		mLatency.SetDataType(pdata.MetricDataTypeHistogram)
-		mLatency.SetName("latency")
-		mLatency.Histogram().SetAggregationTemporality(p.config.GetAggregationTemporality())
+func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKey resourceKey) error {
+	for libKey := range p.latencyCount[resAttrKey] {
+		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
+		ilm.InstrumentationLibrary().SetName(string(libKey))
+		for mKey := range p.latencyCount[resAttrKey][libKey] {
+			mLatency := ilm.Metrics().AppendEmpty()
+			mLatency.SetDataType(pdata.MetricDataTypeHistogram)
+			mLatency.SetName("latency")
+			mLatency.Histogram().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
-		timestamp := pdata.TimestampFromTime(time.Now())
+			timestamp := pdata.TimestampFromTime(time.Now())
 
-		dpLatency := mLatency.Histogram().DataPoints().AppendEmpty()
-		dpLatency.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
-		dpLatency.SetTimestamp(timestamp)
-		dpLatency.SetExplicitBounds(p.latencyBounds)
-		dpLatency.SetBucketCounts(p.latencyBucketCounts[resAttrKey][mKey])
-		dpLatency.SetCount(p.latencyCount[resAttrKey][mKey])
-		dpLatency.SetSum(p.latencySum[resAttrKey][mKey])
+			dpLatency := mLatency.Histogram().DataPoints().AppendEmpty()
+			dpLatency.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
+			dpLatency.SetTimestamp(timestamp)
+			dpLatency.SetExplicitBounds(p.latencyBounds)
+			dpLatency.SetBucketCounts(p.latencyBucketCounts[resAttrKey][libKey][mKey])
+			dpLatency.SetCount(p.latencyCount[resAttrKey][libKey][mKey])
+			dpLatency.SetSum(p.latencySum[resAttrKey][libKey][mKey])
 
-		setLatencyExemplars(p.latencyExemplarsData[resAttrKey][mKey], timestamp, dpLatency.Exemplars())
+			setLatencyExemplars(p.latencyExemplarsData[resAttrKey][libKey][mKey], timestamp, dpLatency.Exemplars())
 
-		dimensions, err := p.getDimensionsByMetricKey(mKey)
-		if err != nil {
-			p.logger.Error(err.Error())
-			return err
+			dimensions, err := p.getDimensionsByMetricKey(mKey)
+			if err != nil {
+				p.logger.Error(err.Error())
+				return err
+			}
+
+			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
+				dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
+				return true
+			})
 		}
-
-		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
-			dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
-			return true
-		})
 	}
 	return nil
 }
 
 // collectCallMetrics collects the raw call count metrics, writing the data
 // into the given instrumentation library metrics.
-func (p *processorImp) collectCallMetrics(ilm pdata.InstrumentationLibraryMetrics, resAttrKey resourceKey) error {
-	for mKey := range p.callSum[resAttrKey] {
-		mCalls := ilm.Metrics().AppendEmpty()
-		mCalls.SetDataType(pdata.MetricDataTypeIntSum)
-		mCalls.SetName("calls_total")
-		mCalls.IntSum().SetIsMonotonic(true)
-		mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
+func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey resourceKey) error {
+	for libKey := range p.callSum[resAttrKey] {
+		ilm := rm.InstrumentationLibraryMetrics().AppendEmpty()
+		ilm.InstrumentationLibrary().SetName(string(libKey))
+		for mKey := range p.callSum[resAttrKey][libKey] {
+			mCalls := ilm.Metrics().AppendEmpty()
+			mCalls.SetDataType(pdata.MetricDataTypeIntSum)
+			mCalls.SetName("calls_total")
+			mCalls.IntSum().SetIsMonotonic(true)
+			mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
-		dpCalls := mCalls.IntSum().DataPoints().AppendEmpty()
-		dpCalls.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
-		dpCalls.SetTimestamp(pdata.TimestampFromTime(time.Now()))
-		dpCalls.SetValue(p.callSum[resAttrKey][mKey])
+			dpCalls := mCalls.IntSum().DataPoints().AppendEmpty()
+			dpCalls.SetStartTimestamp(pdata.TimestampFromTime(p.startTime))
+			dpCalls.SetTimestamp(pdata.TimestampFromTime(time.Now()))
+			dpCalls.SetValue(p.callSum[resAttrKey][libKey][mKey])
 
-		dimensions, err := p.getDimensionsByMetricKey(mKey)
-		if err != nil {
-			p.logger.Error(err.Error())
-			return err
+			dimensions, err := p.getDimensionsByMetricKey(mKey)
+			if err != nil {
+				p.logger.Error(err.Error())
+				return err
+			}
+
+			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
+				dpCalls.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
+				return true
+			})
 		}
-
-		dimensions.Range(func(k string, v pdata.AttributeValue) bool {
-			dpCalls.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
-			return true
-		})
 	}
 	return nil
 }
@@ -420,39 +438,56 @@ func (p *processorImp) aggregateMetrics(traces pdata.Traces) {
 
 func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpans, serviceName string) {
 	ilsSlice := rspans.InstrumentationLibrarySpans()
+	instrLibName := instrLibKey(instrumentationLibraryName)
 	for j := 0; j < ilsSlice.Len(); j++ {
 		ils := ilsSlice.At(j)
+
+		// if config is set to inherit instrumentation library name, then assume from trace
+		// otherwise use default
+		if p.inheritInstrumentationLibraryName {
+			instrLibName = instrLibKey(ils.InstrumentationLibrary().Name())
+		}
+
 		spans := ils.Spans()
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
-			p.aggregateMetricsForSpan(serviceName, span, rspans.Resource().Attributes())
+			aggrMeta := aggregationMeta{
+				serviceName: serviceName,
+				resourceAttr: rspans.Resource().Attributes(),
+				instrLibName: instrLibName,
+			}
+			p.aggregateMetricsForSpan(span, aggrMeta)
 		}
 	}
 }
 
-func (p *processorImp) aggregateMetricsForSpan(serviceName string, span pdata.Span, resourceAttr pdata.AttributeMap) {
+func (p *processorImp) aggregateMetricsForSpan(span pdata.Span, aggregationMeta aggregationMeta) {
 	latencyInMilliseconds := float64(span.EndTimestamp()-span.StartTimestamp()) / float64(time.Millisecond.Nanoseconds())
 
 	// Binary search to find the latencyInMilliseconds bucket index.
 	index := sort.SearchFloat64s(p.latencyBounds, latencyInMilliseconds)
 
-	mKey := p.buildMetricKey(span, resourceAttr, p.attachSpanAndTraceID)
-	resourceAttrKey := p.buildResourceAttrKey(serviceName, resourceAttr)
+	mKey := p.buildMetricKey(span, aggregationMeta.resourceAttr, p.attachSpanAndTraceID)
+	resourceAttrKey := p.buildResourceAttrKey(aggregationMeta.serviceName, aggregationMeta.resourceAttr)
 
-	p.cacheMetricKey(span, mKey, resourceAttr)
-	p.cacheResourceAttrKey(serviceName, resourceAttr, resourceAttrKey)
-	p.updateCallMetrics(resourceAttrKey, mKey)
-	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index)
-	p.updateLatencyExemplars(resourceAttrKey, mKey, latencyInMilliseconds, span.TraceID())
+	p.cacheMetricKey(span, mKey, aggregationMeta.resourceAttr)
+	p.cacheResourceAttrKey(aggregationMeta.serviceName, aggregationMeta.resourceAttr, resourceAttrKey)
+	p.updateCallMetrics(resourceAttrKey, mKey, aggregationMeta.instrLibName)
+	p.updateLatencyMetrics(resourceAttrKey, mKey, latencyInMilliseconds, index, aggregationMeta.instrLibName)
+	p.updateLatencyExemplars(resourceAttrKey, mKey, latencyInMilliseconds, span.TraceID(), aggregationMeta.instrLibName)
 }
 
 // updateCallMetrics increments the call count for the given metric key.
-func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey) {
+func (p *processorImp) updateCallMetrics(rKey resourceKey, mKey metricKey, iKey instrLibKey) {
 	if _, ok := p.callSum[rKey]; !ok {
-		p.callSum[rKey] = make(map[metricKey]int64)
+		p.callSum[rKey] = make(map[instrLibKey]map[metricKey]int64)
 	}
 
-	p.callSum[rKey][mKey]++
+	if _, ok := p.callSum[rKey][iKey]; !ok {
+		p.callSum[rKey][iKey] = make(map[metricKey]int64)
+	}
+
+	p.callSum[rKey][iKey][mKey]++
 }
 
 func (p *processorImp) reset() {
@@ -470,20 +505,24 @@ func (p *processorImp) reset() {
 // resetAccumulatedMetrics resets the internal maps used to store created metric data. Also purge the cache for
 // metricKeyToDimensions.
 func (p *processorImp) resetAccumulatedMetrics() {
-	p.callSum = make(map[resourceKey]map[metricKey]int64)
-	p.latencyCount = make(map[resourceKey]map[metricKey]uint64)
-	p.latencySum = make(map[resourceKey]map[metricKey]float64)
-	p.latencyBucketCounts = make(map[resourceKey]map[metricKey][]uint64)
+	p.callSum = make(map[resourceKey]map[instrLibKey]map[metricKey]int64)
+	p.latencyCount = make(map[resourceKey]map[instrLibKey]map[metricKey]uint64)
+	p.latencySum = make(map[resourceKey]map[instrLibKey]map[metricKey]float64)
+	p.latencyBucketCounts = make(map[resourceKey]map[instrLibKey]map[metricKey][]uint64)
 	p.metricKeyToDimensions.Purge()
 	p.resourceKeyToDimensions.Purge()
 }
 
 // updateLatencyExemplars sets the histogram exemplars for the given resource and metric key and append the exemplar data.
-func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, value float64, traceID pdata.TraceID) {
-	rled, ok := p.latencyExemplarsData[rKey]
+func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, value float64, traceID pdata.TraceID, instrLibName instrLibKey) {
+	if _, ok := p.latencyExemplarsData[rKey]; !ok {
+		p.latencyExemplarsData[rKey] = make(map[instrLibKey]map[metricKey][]exemplarData)
+	}
+
+	rled, ok := p.latencyExemplarsData[rKey][instrLibName]
 	if !ok {
 		rled = make(map[metricKey][]exemplarData)
-		p.latencyExemplarsData[rKey] = rled
+		p.latencyExemplarsData[rKey][instrLibName] = rled
 	}
 
 	rled[mKey] = append(rled[mKey], exemplarData{
@@ -496,32 +535,40 @@ func (p *processorImp) updateLatencyExemplars(rKey resourceKey, mKey metricKey, 
 // the data structure. An exemplar is a punctual value that exists at specific moment in time
 // and should be not considered like a metrics that persist over time.
 func (p *processorImp) resetExemplarData() {
-	p.latencyExemplarsData = make(map[resourceKey]map[metricKey][]exemplarData)
+	p.latencyExemplarsData = make(map[resourceKey]map[instrLibKey]map[metricKey][]exemplarData)
 }
 
 // updateLatencyMetrics increments the histogram counts for the given metric key and bucket index.
-func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, latency float64, index int) {
+func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, latency float64, index int, instrLibName instrLibKey) {
+	// update latency bucket counts
 	if _, ok := p.latencyBucketCounts[rKey]; !ok {
-		p.latencyBucketCounts[rKey] = make(map[metricKey][]uint64)
+		p.latencyBucketCounts[rKey] = make(map[instrLibKey]map[metricKey][]uint64)
 	}
-
-	if _, ok := p.latencyBucketCounts[rKey][mKey]; !ok {
-		p.latencyBucketCounts[rKey][mKey] = make([]uint64, len(p.latencyBounds))
+	if _, ok := p.latencyBucketCounts[rKey][instrLibName]; !ok {
+		p.latencyBucketCounts[rKey][instrLibName] = make(map[metricKey][]uint64)
 	}
-
-	p.latencyBucketCounts[rKey][mKey][index]++
-
-	if _, ok := p.latencySum[rKey]; ok {
-		p.latencySum[rKey][mKey] += latency
-	} else {
-		p.latencySum[rKey] = map[metricKey]float64{mKey: latency}
+	if _, ok := p.latencyBucketCounts[rKey][instrLibName][mKey]; !ok {
+		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds))
 	}
+	p.latencyBucketCounts[rKey][instrLibName][mKey][index]++
 
-	if _, ok := p.latencyCount[rKey]; ok {
-		p.latencyCount[rKey][mKey]++
-	} else {
-		p.latencyCount[rKey] = map[metricKey]uint64{mKey: 1}
+	// update latency sum
+	if _, ok := p.latencySum[rKey]; !ok {
+		p.latencySum[rKey] = make(map[instrLibKey]map[metricKey]float64)
 	}
+	if _, ok := p.latencySum[rKey][instrLibName]; !ok {
+		p.latencySum[rKey][instrLibName] = make(map[metricKey]float64)
+	}
+	p.latencySum[rKey][instrLibName][mKey] += latency
+
+	// update latency count
+	if _, ok := p.latencyCount[rKey]; !ok {
+		p.latencyCount[rKey] = make(map[instrLibKey]map[metricKey]uint64)
+	}
+	if _, ok := p.latencyCount[rKey][instrLibName]; !ok {
+		p.latencyCount[rKey][instrLibName] = make(map[metricKey]uint64)
+	}
+	p.latencyCount[rKey][instrLibName][mKey]++
 }
 
 func (p *processorImp) buildDimensionKVs(span pdata.Span, optionalDims []Dimension, resourceAttrs pdata.AttributeMap, attachSpanAndTraceID bool) pdata.AttributeMap {

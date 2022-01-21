@@ -73,6 +73,11 @@ type Config struct {
 	// AttachSpanAndTraceID attaches span id and trace id to metrics generated from spans.
 	// The default value is set to `false`.
 	AttachSpanAndTraceID bool `mapstructure:"attach_span_and_trace_id"`
+
+	// InheritInstrumentationLibraryName defines whether metrics generated from spans should inherit
+	// the instrumentation library name from the span.
+	// Optional. The default value is `false` which will define the instrumentation library name on metrics as `spanmetricsprocessor`.
+	InheritInstrumentationLibraryName bool `mapstructure:"inherit_instrumentation_library_name"`
 }
 
 // GetAggregationTemporality converts the string value given in the config into a MetricAggregationTemporality.

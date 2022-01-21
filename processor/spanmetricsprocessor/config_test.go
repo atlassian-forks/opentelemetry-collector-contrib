@@ -38,31 +38,34 @@ func TestLoadConfig(t *testing.T) {
 	defaultMethod := "GET"
 	defaultRegion := "us-east-1"
 	testcases := []struct {
-		configFile                      string
-		wantMetricsExporter             string
-		wantLatencyHistogramBuckets     []time.Duration
-		wantDimensions                  []Dimension
-		wantDimensionsCacheSize         int
-		wantResourceAttributes          []Dimension
-		wantResourceAttributesCacheSize int
-		wantAggregationTemporality      string
-		wantAttachSpanAndTraceID        bool
+		configFile                            string
+		wantMetricsExporter                   string
+		wantLatencyHistogramBuckets           []time.Duration
+		wantDimensions                        []Dimension
+		wantDimensionsCacheSize               int
+		wantResourceAttributes                []Dimension
+		wantResourceAttributesCacheSize       int
+		wantAggregationTemporality            string
+		wantAttachSpanAndTraceID              bool
+		wantInheritInstrumentationLibraryName bool
 	}{
 		{
-			configFile:                      "config-2-pipelines.yaml",
-			wantMetricsExporter:             "prometheus",
-			wantAggregationTemporality:      cumulative,
-			wantDimensionsCacheSize:         500,
-			wantResourceAttributesCacheSize: 300,
-			wantAttachSpanAndTraceID:        true,
+			configFile:                            "config-2-pipelines.yaml",
+			wantMetricsExporter:                   "prometheus",
+			wantAggregationTemporality:            cumulative,
+			wantDimensionsCacheSize:               500,
+			wantResourceAttributesCacheSize:       300,
+			wantAttachSpanAndTraceID:              true,
+			wantInheritInstrumentationLibraryName: true,
 		},
 		{
-			configFile:                      "config-3-pipelines.yaml",
-			wantMetricsExporter:             "otlp/spanmetrics",
-			wantAggregationTemporality:      cumulative,
-			wantDimensionsCacheSize:         defaultDimensionsCacheSize,
-			wantResourceAttributesCacheSize: defaultResourceAttributesCacheSize,
-			wantAttachSpanAndTraceID:        false,
+			configFile:                            "config-3-pipelines.yaml",
+			wantMetricsExporter:                   "otlp/spanmetrics",
+			wantAggregationTemporality:            cumulative,
+			wantDimensionsCacheSize:               defaultDimensionsCacheSize,
+			wantResourceAttributesCacheSize:       defaultResourceAttributesCacheSize,
+			wantAttachSpanAndTraceID:              false,
+			wantInheritInstrumentationLibraryName: false,
 		},
 		{
 			configFile:          "config-full.yaml",
@@ -85,9 +88,10 @@ func TestLoadConfig(t *testing.T) {
 				{"region", &defaultRegion},
 				{"host_id", nil},
 			},
-			wantResourceAttributesCacheSize: 3000,
-			wantAggregationTemporality:      delta,
-			wantAttachSpanAndTraceID:        false,
+			wantResourceAttributesCacheSize:       3000,
+			wantAggregationTemporality:            delta,
+			wantAttachSpanAndTraceID:              false,
+			wantInheritInstrumentationLibraryName: false,
 		},
 	}
 	for _, tc := range testcases {
@@ -116,15 +120,16 @@ func TestLoadConfig(t *testing.T) {
 			require.NotNil(t, cfg)
 			assert.Equal(t,
 				&Config{
-					ProcessorSettings:           config.NewProcessorSettings(config.NewID(typeStr)),
-					MetricsExporter:             tc.wantMetricsExporter,
-					LatencyHistogramBuckets:     tc.wantLatencyHistogramBuckets,
-					Dimensions:                  tc.wantDimensions,
-					DimensionsCacheSize:         tc.wantDimensionsCacheSize,
-					ResourceAttributes:          tc.wantResourceAttributes,
-					ResourceAttributesCacheSize: tc.wantResourceAttributesCacheSize,
-					AggregationTemporality:      tc.wantAggregationTemporality,
-					AttachSpanAndTraceID:        tc.wantAttachSpanAndTraceID,
+					ProcessorSettings:                 config.NewProcessorSettings(config.NewID(typeStr)),
+					MetricsExporter:                   tc.wantMetricsExporter,
+					LatencyHistogramBuckets:           tc.wantLatencyHistogramBuckets,
+					Dimensions:                        tc.wantDimensions,
+					DimensionsCacheSize:               tc.wantDimensionsCacheSize,
+					ResourceAttributes:                tc.wantResourceAttributes,
+					ResourceAttributesCacheSize:       tc.wantResourceAttributesCacheSize,
+					AggregationTemporality:            tc.wantAggregationTemporality,
+					AttachSpanAndTraceID:              tc.wantAttachSpanAndTraceID,
+					InheritInstrumentationLibraryName: tc.wantInheritInstrumentationLibraryName,
 				},
 				cfg.Processors[config.NewID(typeStr)],
 			)

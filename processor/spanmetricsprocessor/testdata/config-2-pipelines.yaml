@@ -29,6 +29,7 @@ processors:
     dimensions_cache_size: 500
     # the max number of items in the `resource_key_to_dimensions_cache`. Default is 1000
     resource_attributes_cache_size: 300
+    inherit_instrumentation_library_name: true
     attach_span_and_trace_id: true
 service:
   pipelines:

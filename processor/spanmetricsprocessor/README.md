@@ -74,6 +74,8 @@ The following settings can be optionally configured:
 - `attach_span_and_trace_id` attaches span id and trace id as attributes on metrics generated from spans if set to `true`. If not provided,
   will use default value of `false`.
 
+  - `inherit_instrumentation_library_name`: defines whether the metrics generated from spans should inherit the same instrumentation library name as the span. If not provided, will use default value of `false` which will define the instrumentation library name as `spanmetricsprocessor` on metrics.
+
 ## Examples
 
 The following is a simple example usage of the spanmetrics processor.
@@ -116,7 +118,8 @@ processors:
         default: us-east-1
       - name: host_id
     resource_attributes_cache_size: 1000
-    aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"     
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"    
+    inherit_instrumentation_library_name: true 
 
 exporters:
   jaeger:
