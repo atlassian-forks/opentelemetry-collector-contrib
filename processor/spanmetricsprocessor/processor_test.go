@@ -360,6 +360,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 		{
 			name:                   "Test maximum span time will not cause out of bounds index error",
 			aggregationTemporality: delta,
+			verifier:               verifyConsumeMetricsInputDelta,
 			traces:                 []pdata.Traces{spanWithLargeTimestamp},
 		},
 	}
