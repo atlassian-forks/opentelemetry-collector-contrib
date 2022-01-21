@@ -310,7 +310,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 					// Get maximum 64 int by shifting left by 1 and then taking the complement
 					// time.Unix adds (1969*365 + 1969/4 - 1969/100 + 1969/400) * 86400 == 62135638488 to the input value (see internal implementation) so we have to subtract that
 					// to get the maximum value that time.Unix can take.
-					endTime: pdata.TimestampFromTime(time.Unix(1<<63-62135596801, 0)),
+					endTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135638488, 0)),
 				},
 				{
 					operation:  "/ping",
@@ -319,7 +319,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
 					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
 					// maximum seconds value held by time.Time as explained above.
-					startTime: pdata.TimestampFromTime(time.Unix(1<<63-62135596801, 0)),
+					startTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135638488, 0)),
 					endTime:   pdata.TimestampFromTime(time.Time{}),
 				},
 			},
@@ -360,7 +360,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 		{
 			name:                   "Test maximum span time will not cause out of bounds index error",
 			aggregationTemporality: delta,
-			verifier:               verifyConsumeMetricsInputDelta,
+			verifier:               nil,
 			traces:                 []pdata.Traces{spanWithLargeTimestamp},
 		},
 	}
@@ -375,7 +375,11 @@ func TestProcessorConsumeTraces(t *testing.T) {
 
 			// Mocked metric exporter will perform validation on metrics, during p.ConsumeTraces()
 			mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-				return tc.verifier(t, input, false, make(map[string]int))
+				if tc.verifier != nil {
+					return tc.verifier(t, input, false, make(map[string]int))
+				}
+
+				return true
 			})).Return(nil)
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
