@@ -292,6 +292,10 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 	}
 }
 
+func verifyMetricsNoOp(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+	return true
+}
+
 func TestProcessorConsumeTraces(t *testing.T) {
 	spanWithLargeTimestamp := pdata.NewTraces()
 	initServiceSpans(
@@ -360,7 +364,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 		{
 			name:                   "Test maximum span time will not cause out of bounds index error",
 			aggregationTemporality: delta,
-			verifier:               nil,
+			verifier:               verifyMetricsNoOp,
 			traces:                 []pdata.Traces{spanWithLargeTimestamp},
 		},
 	}
@@ -375,11 +379,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 
 			// Mocked metric exporter will perform validation on metrics, during p.ConsumeTraces()
 			mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
-				if tc.verifier != nil {
-					return tc.verifier(t, input, false, make(map[string]int))
-				}
-
-				return true
+				return tc.verifier(t, input, false, make(map[string]int))
 			})).Return(nil)
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
