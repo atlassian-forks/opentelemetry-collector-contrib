@@ -77,7 +77,7 @@ type Transform struct {
 	// --- SPECIFY THE ACTION TO TAKE ON THE MATCHED METRIC(S) ---
 
 	// Action specifies the action performed on the matched metric. Action specifies
-	// if the operations (specified below) are performed on metrics in place (update),
+	// if the operations (specified below) are performed on metrics in place (update/delete),
 	// on an inserted clone (insert), or on a new combined metric that includes all
 	// data points from the set of matching metrics (combine).
 	// REQUIRED
@@ -171,9 +171,12 @@ const (
 
 	// Group groups mutiple metrics matching the predicate into multiple ResourceMetrics messages
 	Group ConfigAction = "group"
+
+	// Group groups mutiple metrics matching the predicate into multiple ResourceMetrics messages
+	Delete ConfigAction = "delete"
 )
 
-var Actions = []ConfigAction{Insert, Update, Combine, Group}
+var Actions = []ConfigAction{Insert, Update, Combine, Group, Delete}
 
 func (ca ConfigAction) isValid() bool {
 	for _, configAction := range Actions {

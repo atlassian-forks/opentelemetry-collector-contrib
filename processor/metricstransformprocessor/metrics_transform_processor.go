@@ -217,6 +217,11 @@ func (mtp *metricsTransformProcessor) ProcessMetrics(_ context.Context, md pdata
 		for _, transform := range mtp.transforms {
 			matchedMetrics := transform.MetricIncludeFilter.getMatches(nameToMetricMapping)
 
+			if transform.Action == Delete {
+				metrics = mtp.removeMatchedMetrics(metrics, matchedMetrics)
+				continue
+			}
+
 			if transform.Action == Group && len(matchedMetrics) > 0 {
 				nData := mtp.groupMatchedMetrics(node, resource, matchedMetrics, transform)
 				groupedMds = append(groupedMds, nData)

@@ -30,6 +30,26 @@ type metricsTransformTest struct {
 var (
 	// test cases
 	standardTests = []metricsTransformTest{
+		// DELETE
+		{
+			name: "metric_name_delete",
+			transforms: []internalTransform{
+				{
+					MetricIncludeFilter: internalFilterStrict{include: "metric1"},
+					Action:              Delete,
+				},
+			},
+			in: []*metricspb.Metric{
+				metricBuilder().setName("metric1").
+					setDataType(metricspb.MetricDescriptor_GAUGE_INT64).build(),
+				metricBuilder().setName("metric2").
+					setDataType(metricspb.MetricDescriptor_GAUGE_INT64).build(),
+			},
+			out: []*metricspb.Metric{
+				metricBuilder().setName("metric2").
+					setDataType(metricspb.MetricDescriptor_GAUGE_INT64).build(),
+			},
+		},
 		// UPDATE
 		{
 			name: "metric_name_update",
