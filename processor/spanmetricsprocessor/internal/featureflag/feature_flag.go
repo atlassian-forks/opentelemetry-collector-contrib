@@ -34,10 +34,10 @@ type featureFlag struct {
 	Client *ld.LDClient
 }
 
+const ffName = "OBC-253-generate-metrics-from-span-of-service-proxy"
 func (ld *featureFlag) EnabledForService(serviceID string) (bool, error) {
 	if ld.Client == nil {
 		return false, errors.New("LaunchDarkly is not initialized")
 	}
-	return ld.Client.BoolVariation("OBC-253-generate-metrics-from-span-of-service-proxy",
-		lduser.NewUser(serviceID), false)
+	return ld.Client.BoolVariation(ffName, lduser.NewUser(serviceID), false)
 }
