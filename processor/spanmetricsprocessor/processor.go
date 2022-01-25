@@ -451,6 +451,7 @@ func (p *processorImp) aggregateMetrics(traces pdata.Traces) {
 }
 
 func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpans, serviceName string) {
+	// if FF is not configured, enable metrics generating as the default behaviour
 	if p.featureFlag != nil {
 		if enabled, err := p.featureFlag.EnabledForService(serviceName); err != nil || !enabled {
 			if err != nil {
