@@ -31,6 +31,8 @@ processors:
     resource_attributes_cache_size: 300
     inherit_instrumentation_library_name: true
     attach_span_and_trace_id: true
+    enable_feature_flag: true
+    launch_darkly_key: "LD_Key"
 service:
   pipelines:
     traces:
