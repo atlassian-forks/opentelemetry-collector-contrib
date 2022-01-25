@@ -79,11 +79,11 @@ type Config struct {
 	// Optional. The default value is `false` which will define the instrumentation library name on metrics as `spanmetricsprocessor`.
 	InheritInstrumentationLibraryName bool `mapstructure:"inherit_instrumentation_library_name"`
 
-	// EnableFeatureFlag defines whether the LaunchDarkly feature flag is enabled
-	// Optional. The default value is `false`
+	// EnableFeatureFlag defines whether the LaunchDarkly feature flag is enabled.
+	// Optional. The default value is `false`. i.e. generate metrics from every service.
 	EnableFeatureFlag bool `mapstructure:"enable_feature_flag"`
 
-	// LaunchDarklyKey defines the LaunchDarkly key
+	// LaunchDarklyKey defines the LaunchDarkly key.
 	// Optional. Only required when `EnableFeatureFlag` is `true`.
 	LaunchDarklyKey string `mapstructure:"launch_darkly_key"`
 }

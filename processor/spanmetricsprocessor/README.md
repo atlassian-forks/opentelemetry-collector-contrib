@@ -61,20 +61,27 @@ The following settings can be optionally configured:
   One of either `AGGREGATION_TEMPORALITY_CUMULATIVE` or `AGGREGATION_TEMPORALITY_DELTA`.
   - Default: `AGGREGATION_TEMPORALITY_CUMULATIVE`
 
-- `resource_attributes`: the list of resource attributes to add together with the default resource attributes defined 
-  above. Each additional resource attribute is defined with a `name` which is looked up in the span's collection of 
-  resource attributes. If the `name`d resource attribute is missing in the span, the optional provided `default` is 
+- `resource_attributes`: the list of resource attributes to add together with the default resource attributes defined
+  above. Each additional resource attribute is defined with a `name` which is looked up in the span's collection of
+  resource attributes. If the `name`d resource attribute is missing in the span, the optional provided `default` is
   used. If no `default` is provided, this resource attribute will be **omitted** from the metric.
-  
+
   `service.name` will be automatically added as a resource attribute to all the generated metrics.
 
 - `resource_attributes_cache_size`: the max number of items in the `resource_key_to_dimensions_cache`. If not provided,
-   will use default value size `1000`.
+  will use default value size `1000`.
 
-- `attach_span_and_trace_id` attaches span id and trace id as attributes on metrics generated from spans if set to `true`. If not provided,
-  will use default value of `false`.
+- `attach_span_and_trace_id` attaches span id and trace id as attributes on metrics generated from spans if set
+  to `true`. If not provided, will use default value of `false`.
 
-  - `inherit_instrumentation_library_name`: defines whether the metrics generated from spans should inherit the same instrumentation library name as the span. If not provided, will use default value of `false` which will define the instrumentation library name as `spanmetricsprocessor` on metrics.
+- `inherit_instrumentation_library_name`: defines whether the metrics generated from spans should inherit the same
+  instrumentation library name as the span. If not provided, will use default value of `false` which will define the
+  instrumentation library name as `spanmetricsprocessor` on metrics.
+
+- `enable_feature_flag`: defines whether the LaunchDarkly feature flag is enabled. Optional. The default value
+  is `false`. i.e. generate metrics from every service.
+
+- `launch_darkly_key`: defines the LaunchDarkly key. Optional. Only required when `EnableFeatureFlag` is `true`.
 
 ## Examples
 
