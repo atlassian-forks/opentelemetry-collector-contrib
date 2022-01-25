@@ -49,6 +49,9 @@ const (
 
 	defaultDimensionsCacheSize         = 1000
 	defaultResourceAttributesCacheSize = 1000
+
+	defaultCallsTotalMetricName = "calls_total"
+	defaultLatencyMetricName    = "latency"
 )
 
 var (
@@ -66,7 +69,7 @@ type exemplarData struct {
 }
 
 type aggregationMeta struct {
-	serviceName string
+	serviceName  string
 	instrLibName instrLibKey
 	resourceAttr pdata.AttributeMap
 }
@@ -121,6 +124,8 @@ type processorImp struct {
 
 	// Defines whether metrics should inherit instrumentation library name from span
 	inheritInstrumentationLibraryName bool
+
+	transforms []Transform
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -141,6 +146,10 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 	if err := validateDimensions(pConfig.ResourceAttributes, []string{serviceNameKey}); err != nil {
+		return nil, err
+	}
+
+	if err := validateTransforms(pConfig.Transforms); err != nil {
 		return nil, err
 	}
 
@@ -171,6 +180,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		metricKeyToDimensions:             metricKeyToDimensionsCache,
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
+		transforms:                        pConfig.Transforms,
 	}, nil
 }
 
@@ -186,6 +196,29 @@ func mapDurationsToMillis(vs []time.Duration) []float64 {
 		vsm[i] = durationToMillis(v)
 	}
 	return vsm
+}
+
+// validateTransforms checks that a user only specifies one catch-all case as the last item declared in the transforms config.
+// It also checks that the user has specified both metric names to be renamed.
+func validateTransforms(transforms []Transform) error {
+	hasDefault := false
+	for _, transform := range transforms {
+		// can not specify a rename rule after a default catch-all case is specified
+		// this is because the transform occurs on a first match basis, meaning that the catch-all will always
+		// be executed and the rest ignored.
+		if hasDefault {
+			return fmt.Errorf("transforms: rename rule specified after catch-all case (0 attributes rule) is invalid")
+		}
+
+		if len(transform.Attributes) == 0 {
+			hasDefault = true
+		}
+
+		if transform.NewCallsTotalMetricName == "" || transform.NewLatencyMetricName == "" {
+			return fmt.Errorf("transforms: new metric name must be specified")
+		}
+	}
+	return nil
 }
 
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions. Considering
@@ -343,7 +376,6 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 		for mKey := range p.latencyCount[resAttrKey][libKey] {
 			mLatency := ilm.Metrics().AppendEmpty()
 			mLatency.SetDataType(pdata.MetricDataTypeHistogram)
-			mLatency.SetName("latency")
 			mLatency.Histogram().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
 			timestamp := pdata.TimestampFromTime(time.Now())
@@ -364,6 +396,14 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 				return err
 			}
 
+			mLatency.SetName(defaultLatencyMetricName)
+			for _, transform := range p.transforms {
+				if transform.attributesMatched(dimensions) {
+					mLatency.SetName(transform.NewLatencyMetricName)
+					break
+				}
+			}
+
 			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
 				dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
 				return true
@@ -382,7 +422,6 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 		for mKey := range p.callSum[resAttrKey][libKey] {
 			mCalls := ilm.Metrics().AppendEmpty()
 			mCalls.SetDataType(pdata.MetricDataTypeIntSum)
-			mCalls.SetName("calls_total")
 			mCalls.IntSum().SetIsMonotonic(true)
 			mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
@@ -395,6 +434,14 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 			if err != nil {
 				p.logger.Error(err.Error())
 				return err
+			}
+
+			mCalls.SetName(defaultCallsTotalMetricName)
+			for _, transform := range p.transforms {
+				if transform.attributesMatched(dimensions) {
+					mCalls.SetName(transform.NewCallsTotalMetricName)
+					break
+				}
 			}
 
 			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
@@ -452,7 +499,7 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
 			aggrMeta := aggregationMeta{
-				serviceName: serviceName,
+				serviceName:  serviceName,
 				resourceAttr: rspans.Resource().Attributes(),
 				instrLibName: instrLibName,
 			}
