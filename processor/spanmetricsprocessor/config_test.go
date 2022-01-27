@@ -48,6 +48,8 @@ func TestLoadConfig(t *testing.T) {
 		wantAggregationTemporality            string
 		wantAttachSpanAndTraceID              bool
 		wantInheritInstrumentationLibraryName bool
+		wantEnableFeatureFlag                 bool
+		wantLaunchDarklyKey                   string
 	}{
 		{
 			configFile:                            "config-2-pipelines.yaml",
@@ -57,6 +59,8 @@ func TestLoadConfig(t *testing.T) {
 			wantResourceAttributesCacheSize:       300,
 			wantAttachSpanAndTraceID:              true,
 			wantInheritInstrumentationLibraryName: true,
+			wantEnableFeatureFlag:                 true,
+			wantLaunchDarklyKey:                   "LD_Key",
 		},
 		{
 			configFile:                            "config-3-pipelines.yaml",
@@ -66,6 +70,8 @@ func TestLoadConfig(t *testing.T) {
 			wantResourceAttributesCacheSize:       defaultResourceAttributesCacheSize,
 			wantAttachSpanAndTraceID:              false,
 			wantInheritInstrumentationLibraryName: false,
+			wantEnableFeatureFlag:                 false,
+			wantLaunchDarklyKey:                   "",
 		},
 		{
 			configFile:          "config-full.yaml",
@@ -92,6 +98,8 @@ func TestLoadConfig(t *testing.T) {
 			wantAggregationTemporality:            delta,
 			wantAttachSpanAndTraceID:              false,
 			wantInheritInstrumentationLibraryName: false,
+			wantEnableFeatureFlag:                 false,
+			wantLaunchDarklyKey:                   "",
 		},
 	}
 	for _, tc := range testcases {
@@ -130,6 +138,8 @@ func TestLoadConfig(t *testing.T) {
 					AggregationTemporality:            tc.wantAggregationTemporality,
 					AttachSpanAndTraceID:              tc.wantAttachSpanAndTraceID,
 					InheritInstrumentationLibraryName: tc.wantInheritInstrumentationLibraryName,
+					EnableFeatureFlag:                 tc.wantEnableFeatureFlag,
+					LaunchDarklyKey:                   tc.wantLaunchDarklyKey,
 				},
 				cfg.Processors[config.NewID(typeStr)],
 			)

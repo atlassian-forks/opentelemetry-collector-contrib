@@ -25,6 +25,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
+
 	"go.opentelemetry.io/collector/translator/conventions"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
@@ -66,7 +68,7 @@ type exemplarData struct {
 }
 
 type aggregationMeta struct {
-	serviceName string
+	serviceName  string
 	instrLibName instrLibKey
 	resourceAttr pdata.AttributeMap
 }
@@ -121,6 +123,9 @@ type processorImp struct {
 
 	// Defines whether metrics should inherit instrumentation library name from span
 	inheritInstrumentationLibraryName bool
+
+	// LaunchDarkly feature flag
+	featureFlag featureflag.FeatureFlag
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -154,6 +159,14 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 
+	var ff featureflag.FeatureFlag
+	if pConfig.EnableFeatureFlag {
+		ff, err = featureflag.New(pConfig.LaunchDarklyKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &processorImp{
 		logger:                            logger,
 		config:                            *pConfig,
@@ -171,6 +184,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		metricKeyToDimensions:             metricKeyToDimensionsCache,
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
+		featureFlag:                       ff,
 	}, nil
 }
 
@@ -437,6 +451,16 @@ func (p *processorImp) aggregateMetrics(traces pdata.Traces) {
 }
 
 func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpans, serviceName string) {
+	// if FF is not configured, enable metrics generating as the default behaviour
+	if p.featureFlag != nil {
+		if enabled, err := p.featureFlag.EnabledForService(serviceName); err != nil || !enabled {
+			if err != nil {
+				p.logger.Error(err.Error())
+			}
+			return
+		}
+	}
+
 	ilsSlice := rspans.InstrumentationLibrarySpans()
 	instrLibName := instrLibKey(instrumentationLibraryName)
 	for j := 0; j < ilsSlice.Len(); j++ {
@@ -452,7 +476,7 @@ func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpan
 		for k := 0; k < spans.Len(); k++ {
 			span := spans.At(k)
 			aggrMeta := aggregationMeta{
-				serviceName: serviceName,
+				serviceName:  serviceName,
 				resourceAttr: rspans.Resource().Attributes(),
 				instrLibName: instrLibName,
 			}
