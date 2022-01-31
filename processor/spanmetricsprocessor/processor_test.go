@@ -17,6 +17,7 @@ package spanmetricsprocessor
 import (
 	"context"
 	"fmt"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
 	"testing"
 	"time"
 
@@ -217,7 +218,12 @@ func TestProcessorConsumeTracesErrors(t *testing.T) {
 			tcon := &mocks.TracesConsumer{}
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(tc.consumeTracesErr)
 
-			p := newProcessorImp(mexp, tcon, nil, cumulative, t, false, false)
+			p := newProcessorImp(t, mexp, tcon, processorConfig{
+				defaultNullValue:                  nil,
+				temporality:                       cumulative,
+				attachSpanAndTraceID:              false,
+				inheritInstrumentationLibraryName: false,
+			})
 
 			traces := buildSampleTrace()
 
@@ -273,7 +279,12 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false, false)
+			p := newProcessorImp(t, mexp, tcon, processorConfig{
+				defaultNullValue:                  &defaultNullValue,
+				temporality:                       cumulative,
+				attachSpanAndTraceID:              false,
+				inheritInstrumentationLibraryName: false,
+			})
 
 			for _, traces := range tc.traces {
 				// Test
@@ -341,7 +352,12 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 			defaultNullValue := "defaultNullValue"
-			p := newProcessorImp(mexp, tcon, &defaultNullValue, tc.aggregationTemporality, t, false, false)
+			p := newProcessorImp(t, mexp, tcon, processorConfig{
+				defaultNullValue:                  &defaultNullValue,
+				temporality:                       tc.aggregationTemporality,
+				attachSpanAndTraceID:              false,
+				inheritInstrumentationLibraryName: false,
+			})
 
 			for _, traces := range tc.traces {
 				// Test
@@ -376,7 +392,12 @@ func TestInheritInstrumentationLibraryName(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false, true)
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              false,
+		inheritInstrumentationLibraryName: true,
+	})
 
 	traces := buildSampleTrace()
 
@@ -408,7 +429,12 @@ func TestDefaultInstrumentationLibraryName(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false, false)
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              false,
+		inheritInstrumentationLibraryName: false,
+	})
 
 	traces := buildSampleTrace()
 
@@ -494,8 +520,12 @@ func TestResourceCopying(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false, false)
-
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              false,
+		inheritInstrumentationLibraryName: false,
+	})
 	traces := buildSampleTrace()
 	traces.ResourceSpans().At(0).Resource().Attributes().Insert(resourceAttr1, pdata.NewAttributeValueString("1"))
 	traces.ResourceSpans().At(0).Resource().Attributes().Insert(resourceAttr2, pdata.NewAttributeValueString("2"))
@@ -534,7 +564,12 @@ func TestProcessorConsumeTracesWithSpanAndTraceID(t *testing.T) {
 
 	defaultNullValue := "defaultNullValue"
 
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, true, false)
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              true,
+		inheritInstrumentationLibraryName: false,
+	})
 
 	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
 		return verifyConsumeMetricsInputCumulative(t, input, p.attachSpanAndTraceID, expectedSpanAndTraceIDs)
@@ -556,8 +591,12 @@ func TestMetricKeyCache(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false, false)
-
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              false,
+		inheritInstrumentationLibraryName: false,
+	})
 	traces := buildSampleTrace()
 
 	// Test
@@ -589,7 +628,13 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, b, true, true)
+
+	p := newProcessorImp(b, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              true,
+		inheritInstrumentationLibraryName: true,
+	})
 
 	traces := buildSampleTrace()
 
@@ -600,7 +645,33 @@ func BenchmarkProcessorConsumeTraces(b *testing.B) {
 	}
 }
 
-func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, defaultNullValue *string, temporality string, tb testing.TB, attachSpanAndTraceID bool, inheritInstrumentationLibraryName bool) *processorImp {
+type processorConfig struct {
+	defaultNullValue                  *string
+	temporality                       string
+	attachSpanAndTraceID              bool
+	inheritInstrumentationLibraryName bool
+	ff                                featureflag.FeatureFlag
+}
+
+type mockedFF struct {
+	enabledServices map[string]bool
+}
+
+func (ff mockedFF) EnabledForService(name string) (bool, error) {
+	val, ok := ff.enabledServices[name]
+	if !ok {
+		return false, nil
+	}
+	return val, nil
+}
+
+func newProcessorImp(tb testing.TB, mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, pConf processorConfig) *processorImp {
+	defaultNullValue := pConf.defaultNullValue
+	attachSpanAndTraceID := pConf.attachSpanAndTraceID
+	inheritInstrumentationLibraryName := pConf.inheritInstrumentationLibraryName
+	temporality := pConf.temporality
+	ff := pConf.ff
+
 	localDefaultNotInSpanAttrVal := defaultNotInSpanAttrVal
 	// use size 2 for LRU cache for testing purpose
 	metricKeyToDimensions, err := cache.NewCache(DimensionsCacheSize)
@@ -652,6 +723,7 @@ func newProcessorImp(mexp *mocks.MetricsExporter, tcon *mocks.TracesConsumer, de
 		resourceKeyToDimensions:           resourceKeyToDimensions,
 		metricKeyToDimensions:             metricKeyToDimensions,
 		inheritInstrumentationLibraryName: inheritInstrumentationLibraryName,
+		featureFlag:                       ff,
 	}
 }
 
@@ -1184,6 +1256,40 @@ func TestValidateDimensions(t *testing.T) {
 	}
 }
 
+func TestFeatureFlag(t *testing.T) {
+	// Prepare
+	mexp := &mocks.MetricsExporter{}
+	tcon := &mocks.TracesConsumer{}
+
+	mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
+		require.Equal(t, 4, input.MetricCount(),
+			"Should be 3 as the trace does not have a service name and hence is skipped when building metrics",
+		)
+		return true
+	})).Return(nil)
+	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
+
+	defaultNullValue := "defaultNullValue"
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              false,
+		inheritInstrumentationLibraryName: false,
+		ff: &mockedFF{
+			enabledServices: map[string]bool{"service-a": true},
+		},
+	})
+
+	traces := buildSampleTrace()
+
+	// Test
+	ctx := metadata.NewIncomingContext(context.Background(), nil)
+	err := p.ConsumeTraces(ctx, traces)
+
+	// Verify
+	assert.NoError(t, err)
+}
+
 func TestTraceWithoutServiceNameDoesNotGenerateMetrics(t *testing.T) {
 	// Prepare
 	mexp := &mocks.MetricsExporter{}
@@ -1198,7 +1304,12 @@ func TestTraceWithoutServiceNameDoesNotGenerateMetrics(t *testing.T) {
 	tcon.On("ConsumeTraces", mock.Anything, mock.Anything).Return(nil)
 
 	defaultNullValue := "defaultNullValue"
-	p := newProcessorImp(mexp, tcon, &defaultNullValue, cumulative, t, false, false)
+	p := newProcessorImp(t, mexp, tcon, processorConfig{
+		defaultNullValue:                  &defaultNullValue,
+		temporality:                       cumulative,
+		attachSpanAndTraceID:              false,
+		inheritInstrumentationLibraryName: false,
+	})
 
 	trace := pdata.NewTraces()
 

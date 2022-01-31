@@ -25,6 +25,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
+
 	"go.opentelemetry.io/collector/translator/conventions"
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
@@ -125,6 +127,10 @@ type processorImp struct {
 	// Defines whether metrics should inherit instrumentation library name from span
 	inheritInstrumentationLibraryName bool
 
+	// LaunchDarkly feature flag
+	featureFlag featureflag.FeatureFlag
+
+	// transforms defines the metric renaming configuration
 	transforms []Transform
 }
 
@@ -163,6 +169,14 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 
+	var ff featureflag.FeatureFlag
+	if pConfig.EnableFeatureFlag {
+		ff, err = featureflag.New(pConfig.LaunchDarklyKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &processorImp{
 		logger:                            logger,
 		config:                            *pConfig,
@@ -180,6 +194,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		metricKeyToDimensions:             metricKeyToDimensionsCache,
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
+		featureFlag:                       ff,
 		transforms:                        pConfig.Transforms,
 	}, nil
 }
@@ -484,6 +499,16 @@ func (p *processorImp) aggregateMetrics(traces pdata.Traces) {
 }
 
 func (p *processorImp) aggregateMetricsForServiceSpans(rspans pdata.ResourceSpans, serviceName string) {
+	// if FF is not configured, enable metrics generating as the default behaviour
+	if p.featureFlag != nil {
+		if enabled, err := p.featureFlag.EnabledForService(serviceName); err != nil || !enabled {
+			if err != nil {
+				p.logger.Error(err.Error())
+			}
+			return
+		}
+	}
+
 	ilsSlice := rspans.InstrumentationLibrarySpans()
 	instrLibName := instrLibKey(instrumentationLibraryName)
 	for j := 0; j < ilsSlice.Len(); j++ {
