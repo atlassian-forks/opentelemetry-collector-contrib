@@ -17,9 +17,10 @@ package spanmetricsprocessor
 import (
 	"context"
 	"fmt"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
 	"testing"
 	"time"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
 
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
@@ -86,11 +87,12 @@ type serviceSpans struct {
 }
 
 type span struct {
-	operation  string
-	kind       pdata.SpanKind
-	statusCode pdata.StatusCode
-	spanID     pdata.SpanID
-	traceID    pdata.TraceID
+	operation             string
+	kind                  pdata.SpanKind
+	statusCode            pdata.StatusCode
+	spanID                pdata.SpanID
+	traceID               pdata.TraceID
+	additionalStringAttrs map[string]string
 }
 
 func TestProcessorStart(t *testing.T) {
@@ -651,6 +653,7 @@ type processorConfig struct {
 	attachSpanAndTraceID              bool
 	inheritInstrumentationLibraryName bool
 	ff                                featureflag.FeatureFlag
+	transforms                        []Transform
 }
 
 type mockedFF struct {
@@ -724,6 +727,7 @@ func newProcessorImp(tb testing.TB, mexp *mocks.MetricsExporter, tcon *mocks.Tra
 		metricKeyToDimensions:             metricKeyToDimensions,
 		inheritInstrumentationLibraryName: inheritInstrumentationLibraryName,
 		featureFlag:                       ff,
+		transforms:                        pConf.transforms,
 	}
 }
 
@@ -1006,6 +1010,10 @@ func initSpan(span span, s pdata.Span) {
 	s.Attributes().Insert(arrayAttrName, pdata.NewAttributeValueArray())
 	s.SetSpanID(span.spanID)
 	s.SetTraceID(span.traceID)
+
+	for attrKey, attrValue := range span.additionalStringAttrs {
+		s.Attributes().InsertString(attrKey, attrValue)
+	}
 }
 
 func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExporter, component.TracesExporter) {
@@ -1187,6 +1195,199 @@ func TestProcessorDuplicateResourceAttributes(t *testing.T) {
 	p, err := newProcessor(zap.NewNop(), cfg, next)
 	assert.Error(t, err)
 	assert.Nil(t, p)
+}
+
+func TestValidateTransforms(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		transforms  []Transform
+		expectedErr string
+	}{
+		{
+			name:       "no transforms",
+			transforms: []Transform{},
+		},
+		{
+			name: "single transform",
+			transforms: []Transform{
+				{
+					Attributes: []Dimension{
+						{Name: "dimension.1"},
+						{Name: "dimension.2"},
+					},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+		},
+		{
+			name: "transform catch-all case",
+			transforms: []Transform{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+		},
+		{
+			name: "transform with two catch-all cases should error",
+			transforms: []Transform{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "transforms: rename rule specified after catch-all case (0 attributes rule) is invalid",
+		},
+		{
+			name: "transform with rule after catch-all cases should error",
+			transforms: []Transform{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+				{
+					Attributes: []Dimension{
+						{Name: "dimension.1"},
+					},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "transforms: rename rule specified after catch-all case (0 attributes rule) is invalid",
+		},
+		{
+			name: "transform without new calls_total metric name should error",
+			transforms: []Transform{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "transforms: new metric name must be specified",
+		},
+		{
+			name: "transform without new latency metric name should error",
+			transforms: []Transform{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+				},
+			},
+			expectedErr: "transforms: new metric name must be specified",
+		},
+		{
+			name: "transform without new metric name should error",
+			transforms: []Transform{
+				{
+					Attributes: []Dimension{},
+				},
+			},
+			expectedErr: "transforms: new metric name must be specified",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateTransforms(tc.transforms)
+			if tc.expectedErr != "" {
+				assert.EqualError(t, err, tc.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAttributesMatched(t *testing.T) {
+	// no attributes
+	attrMapNoAttrs := pdata.NewAttributeMap()
+
+	// one attribute
+	attrMapOneAttr := pdata.NewAttributeMap()
+	attrMapOneAttr.InitFromMap(map[string]pdata.AttributeValue{
+		"onekey": pdata.NewAttributeValueString("onevalue"),
+	})
+
+	// multiple attributes
+	attrMapMultipleAttr := pdata.NewAttributeMap()
+	attrMapMultipleAttr.InitFromMap(map[string]pdata.AttributeValue{
+		"key1": pdata.NewAttributeValueString("value1"),
+		"key2": pdata.NewAttributeValueString("value2"),
+		"key3": pdata.NewAttributeValueString("value3"),
+	})
+
+	for _, tc := range []struct {
+		name             string
+		metricAttributes *pdata.AttributeMap
+		transform        Transform
+		expectedResult   bool
+	}{
+		{
+			name:             "transform that has no matches should not match",
+			metricAttributes: &attrMapMultipleAttr,
+			transform: Transform{
+				Attributes: []Dimension{
+					{Name: "key_that_doesnt_exist"},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:             "transform requires all attributes to be present to match - no match",
+			metricAttributes: &attrMapMultipleAttr,
+			transform: Transform{
+				Attributes: []Dimension{
+					{Name: "key1"},
+					{Name: "key_that_doesnt_exist"},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:             "transform requires all attributes to be present to match - match",
+			metricAttributes: &attrMapMultipleAttr,
+			transform: Transform{
+				Attributes: []Dimension{
+					{Name: "key1"},
+					{Name: "key2"},
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			name:             "catch-all case should always match - some attributes on metric",
+			metricAttributes: &attrMapMultipleAttr,
+			transform: Transform{
+				Attributes: []Dimension{},
+			},
+			expectedResult: true,
+		},
+		{
+			name:             "catch-all case should always match - no attributes on metric",
+			metricAttributes: &attrMapNoAttrs,
+			transform: Transform{
+				Attributes: []Dimension{},
+			},
+			expectedResult: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			actualResult := tc.transform.attributesMatched(tc.metricAttributes)
+			assert.Equal(t, tc.expectedResult, actualResult)
+		})
+	}
 }
 
 func TestValidateDimensions(t *testing.T) {
