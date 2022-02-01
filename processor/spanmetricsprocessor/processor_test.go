@@ -94,7 +94,6 @@ type span struct {
 	traceID               pdata.TraceID
 	startTime             pdata.Timestamp
 	endTime               pdata.Timestamp
-	additionalStringAttrs map[string]string
 }
 
 func TestProcessorStart(t *testing.T) {
@@ -343,6 +342,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 		aggregationTemporality string
 		verifier               func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool
 		traces                 []pdata.Traces
+		transforms             []Transform
 	}{
 		{
 			name:                   "Test single consumption, three spans (Cumulative).",
@@ -378,6 +378,37 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			},
 			traces: []pdata.Traces{spanWithLargeTimestamp},
 		},
+		{
+			name:                   "Test that metric renaming works",
+			aggregationTemporality: delta,
+			verifier: func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+				rm := input.ResourceMetrics()
+				callsTotalMetrics := rm.At(0).InstrumentationLibraryMetrics().At(0).Metrics()
+				assert.Equal(t, "new_name_calls_total", callsTotalMetrics.At(0).Name())
+
+				latencyMetrics := rm.At(0).InstrumentationLibraryMetrics().At(1).Metrics()
+				assert.Equal(t, "new_name_latency", latencyMetrics.At(0).Name())
+
+				return true
+			},
+			traces: []pdata.Traces{spanWithLargeTimestamp},
+			transforms: []Transform{
+				{
+					Attributes: []Dimension{
+						{Name: "key_that_does_not_exist"},
+					},
+					NewCallsTotalMetricName: "this_should_not_match_calls_total",
+					NewLatencyMetricName:    "this_should_not_occur_latency",
+				},
+				{
+					Attributes: []Dimension{
+						{Name: stringAttrName},
+					},
+					NewCallsTotalMetricName: "new_name_calls_total",
+					NewLatencyMetricName:    "new_name_latency",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -400,6 +431,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 				temporality:                       tc.aggregationTemporality,
 				attachSpanAndTraceID:              false,
 				inheritInstrumentationLibraryName: false,
+				transforms:                        tc.transforms,
 			})
 
 			for _, traces := range tc.traces {
@@ -1059,10 +1091,6 @@ func initSpan(span span, s pdata.Span) {
 	s.Attributes().Insert(arrayAttrName, pdata.NewAttributeValueArray())
 	s.SetSpanID(span.spanID)
 	s.SetTraceID(span.traceID)
-
-	for attrKey, attrValue := range span.additionalStringAttrs {
-		s.Attributes().InsertString(attrKey, attrValue)
-	}
 }
 
 func newOTLPExporters(t *testing.T) (*otlpexporter.Config, component.MetricsExporter, component.TracesExporter) {
