@@ -91,6 +91,8 @@ type span struct {
 	statusCode pdata.StatusCode
 	spanID     pdata.SpanID
 	traceID    pdata.TraceID
+	startTime  pdata.Timestamp
+	endTime    pdata.Timestamp
 }
 
 func TestProcessorStart(t *testing.T) {
@@ -302,6 +304,38 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 }
 
 func TestProcessorConsumeTraces(t *testing.T) {
+	spanWithLargeTimestamp := pdata.NewTraces()
+	initServiceSpans(
+		serviceSpans{
+			serviceName:                "service-b",
+			instrumentationLibraryName: "service-b-instrumentation-library",
+			spans: []span{
+				{
+					operation:  "/ping",
+					kind:       pdata.SpanKindServer,
+					statusCode: pdata.StatusCodeError,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
+					startTime:  pdata.TimestampFromTime(time.Time{}),
+					// maximum seconds value that can be held by time.Time.
+					// Get maximum 64 int by shifting left by 1 and then taking the complement
+					// time.Unix adds 62135596800 to the input value (see internal implementation) so we have to subtract that
+					// to get the maximum value that time.Unix can take.
+					endTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135596800, 0)),
+				},
+				{
+					operation:  "/ping",
+					kind:       pdata.SpanKindServer,
+					statusCode: pdata.StatusCodeError,
+					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
+					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
+					// maximum seconds value held by time.Time as explained above.
+					startTime: pdata.TimestampFromTime(time.Unix(1<<63-1-62135596800, 0)),
+					endTime:   pdata.TimestampFromTime(time.Time{}),
+				},
+			},
+		}, spanWithLargeTimestamp.ResourceSpans().AppendEmpty())
+
 	testcases := []struct {
 		name                   string
 		aggregationTemporality string
@@ -334,6 +368,14 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			verifier:               verifyConsumeMetricsInputDelta,
 			traces:                 []pdata.Traces{buildSampleTrace(), buildSampleTrace()},
 		},
+		{
+			name:                   "Test maximum span time will not cause out of bounds index error",
+			aggregationTemporality: delta,
+			verifier: func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+				return true
+			},
+			traces: []pdata.Traces{spanWithLargeTimestamp},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -344,7 +386,6 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			mexp := &mocks.MetricsExporter{}
 			tcon := &mocks.TracesConsumer{}
 
-			//TODO: CLAIRE: CHECK IF WE CAN ADD TO THESE TESTS
 			// Mocked metric exporter will perform validation on metrics, during p.ConsumeTraces()
 			mexp.On("ConsumeMetrics", mock.Anything, mock.MatchedBy(func(input pdata.Metrics) bool {
 				return tc.verifier(t, input, false, make(map[string]int))
@@ -932,6 +973,9 @@ func verifyMetricLabels(dp metricDataPoint, t testing.TB, seenMetricIDs map[metr
 //       service-b/ping (server)
 func buildSampleTrace() pdata.Traces {
 	traces := pdata.NewTraces()
+	now := time.Now()
+	spanStartTime := pdata.TimestampFromTime(now)
+	spanEndTime := pdata.TimestampFromTime(now.Add(sampleLatencyDuration))
 
 	initServiceSpans(
 		serviceSpans{
@@ -944,6 +988,8 @@ func buildSampleTrace() pdata.Traces {
 					statusCode: pdata.StatusCodeOk,
 					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
 					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+					startTime:  spanStartTime,
+					endTime:    spanEndTime,
 				},
 				{
 					operation:  "/ping",
@@ -951,6 +997,8 @@ func buildSampleTrace() pdata.Traces {
 					statusCode: pdata.StatusCodeOk,
 					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
 					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01}),
+					startTime:  spanStartTime,
+					endTime:    spanEndTime,
 				},
 			},
 		}, traces.ResourceSpans().AppendEmpty())
@@ -965,6 +1013,8 @@ func buildSampleTrace() pdata.Traces {
 					statusCode: pdata.StatusCodeError,
 					spanID:     pdata.NewSpanID([8]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03}),
 					traceID:    pdata.NewTraceID([16]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02}),
+					startTime:  spanStartTime,
+					endTime:    spanEndTime,
 				},
 			},
 		}, traces.ResourceSpans().AppendEmpty())
@@ -994,9 +1044,8 @@ func initSpan(span span, s pdata.Span) {
 	s.SetName(span.operation)
 	s.SetKind(span.kind)
 	s.Status().SetCode(span.statusCode)
-	now := time.Now()
-	s.SetStartTimestamp(pdata.TimestampFromTime(now))
-	s.SetEndTimestamp(pdata.TimestampFromTime(now.Add(sampleLatencyDuration)))
+	s.SetStartTimestamp(span.startTime)
+	s.SetEndTimestamp(span.endTime)
 	s.Attributes().InsertString(stringAttrName, "stringAttrValue")
 	s.Attributes().InsertInt(intAttrName, 99)
 	s.Attributes().InsertDouble(doubleAttrName, 99.99)
