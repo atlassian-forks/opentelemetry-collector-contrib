@@ -16,6 +16,7 @@ package spanmetricsprocessor
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -41,9 +42,9 @@ func TestNewProcessor(t *testing.T) {
 			wantLatencyHistogramBuckets: defaultLatencyHistogramBucketsMs,
 		},
 		{
-			name:                        "latency histogram configured with catch-all bucket to check no additional catch-all bucket inserted",
-			latencyHistogramBuckets:     []time.Duration{2 * time.Millisecond, maxDuration},
-			wantLatencyHistogramBuckets: []float64{2, maxDurationMs},
+			name:                        "catch-all bucket always inserted even when specifying max value possible",
+			latencyHistogramBuckets:     []time.Duration{2 * time.Millisecond, time.Duration(math.MaxInt64)},
+			wantLatencyHistogramBuckets: []float64{2, durationToMillis(math.MaxInt64), maxDurationMs},
 		},
 		{
 			name:                    "full config with no catch-all bucket and check the catch-all bucket is inserted",
