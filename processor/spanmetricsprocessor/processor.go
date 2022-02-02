@@ -129,8 +129,8 @@ type processorImp struct {
 	// LaunchDarkly feature flag
 	featureFlag featureflag.FeatureFlag
 
-	// transforms defines the metric renaming configuration
-	transforms []Transform
+	// renames defines the metric renaming configuration
+	renames []Rename
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -152,7 +152,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 
-	if err := validateTransforms(pConfig.Transforms); err != nil {
+	if err := validateRenames(pConfig.Renames); err != nil {
 		return nil, err
 	}
 
@@ -192,7 +192,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 		featureFlag:                       ff,
-		transforms:                        pConfig.Transforms,
+		renames:                           pConfig.Renames,
 	}, nil
 }
 
@@ -210,24 +210,24 @@ func mapDurationsToMillis(vs []time.Duration) []float64 {
 	return vsm
 }
 
-// validateTransforms checks that a user only specifies one catch-all case as the last item declared in the transforms config.
+// validateRenames checks that a user only specifies one catch-all case as the last item declared in the renames config.
 // It also checks that the user has specified both metric names to be renamed.
-func validateTransforms(transforms []Transform) error {
+func validateRenames(renames []Rename) error {
 	hasDefault := false
-	for _, transform := range transforms {
+	for _, rename := range renames {
 		// can not specify a rename rule after a default catch-all case is specified
-		// this is because the transform occurs on a first match basis, meaning that the catch-all will always
+		// this is because the rename occurs on a first match basis, meaning that the catch-all will always
 		// be executed and the rest ignored.
 		if hasDefault {
-			return fmt.Errorf("transforms: rename rule specified after catch-all case (0 attributes rule) is invalid")
+			return fmt.Errorf("renames: rename rule specified after catch-all case (0 attributes rule) is invalid")
 		}
 
-		if len(transform.Attributes) == 0 {
+		if len(rename.Attributes) == 0 {
 			hasDefault = true
 		}
 
-		if transform.NewCallsTotalMetricName == "" || transform.NewLatencyMetricName == "" {
-			return fmt.Errorf("transforms: new metric name must be specified")
+		if rename.NewCallsTotalMetricName == "" || rename.NewLatencyMetricName == "" {
+			return fmt.Errorf("renames: new metric name must be specified")
 		}
 	}
 	return nil
@@ -409,9 +409,9 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 			}
 
 			mLatency.SetName(defaultLatencyMetricName)
-			for _, transform := range p.transforms {
-				if transform.allAttributesMatched(dimensions) {
-					mLatency.SetName(transform.NewLatencyMetricName)
+			for _, rename := range p.renames {
+				if rename.allAttributesMatched(dimensions) {
+					mLatency.SetName(rename.NewLatencyMetricName)
 					break
 				}
 			}
@@ -449,9 +449,9 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 			}
 
 			mCalls.SetName(defaultCallsTotalMetricName)
-			for _, transform := range p.transforms {
-				if transform.allAttributesMatched(dimensions) {
-					mCalls.SetName(transform.NewCallsTotalMetricName)
+			for _, rename := range p.renames {
+				if rename.allAttributesMatched(dimensions) {
+					mCalls.SetName(rename.NewCallsTotalMetricName)
 					break
 				}
 			}

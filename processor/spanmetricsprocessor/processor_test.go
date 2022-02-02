@@ -342,7 +342,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 		aggregationTemporality string
 		verifier               func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool
 		traces                 []pdata.Traces
-		transforms             []Transform
+		renames                []Rename
 	}{
 		{
 			name:                   "Test single consumption, three spans (Cumulative).",
@@ -392,7 +392,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 				return true
 			},
 			traces: []pdata.Traces{spanWithLargeTimestamp},
-			transforms: []Transform{
+			renames: []Rename{
 				{
 					Attributes: []Dimension{
 						{Name: "key_that_does_not_exist"},
@@ -423,7 +423,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 				return true
 			},
 			traces: []pdata.Traces{spanWithLargeTimestamp},
-			transforms: []Transform{
+			renames: []Rename{
 				{
 					Attributes: []Dimension{
 						{Name: "key_that_does_not_exist"},
@@ -455,7 +455,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 				temporality:                       tc.aggregationTemporality,
 				attachSpanAndTraceID:              false,
 				inheritInstrumentationLibraryName: false,
-				transforms:                        tc.transforms,
+				renames:                           tc.renames,
 			})
 
 			for _, traces := range tc.traces {
@@ -750,7 +750,7 @@ type processorConfig struct {
 	attachSpanAndTraceID              bool
 	inheritInstrumentationLibraryName bool
 	ff                                featureflag.FeatureFlag
-	transforms                        []Transform
+	renames                           []Rename
 }
 
 type mockedFF struct {
@@ -824,7 +824,7 @@ func newProcessorImp(tb testing.TB, mexp *mocks.MetricsExporter, tcon *mocks.Tra
 		metricKeyToDimensions:             metricKeyToDimensions,
 		inheritInstrumentationLibraryName: inheritInstrumentationLibraryName,
 		featureFlag:                       ff,
-		transforms:                        pConf.transforms,
+		renames:                           pConf.renames,
 	}
 }
 
@@ -1298,19 +1298,19 @@ func TestProcessorDuplicateResourceAttributes(t *testing.T) {
 	assert.Nil(t, p)
 }
 
-func TestValidateTransforms(t *testing.T) {
+func TestValidateRenames(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
-		transforms  []Transform
+		renames     []Rename
 		expectedErr string
 	}{
 		{
-			name:       "no transforms",
-			transforms: []Transform{},
+			name:    "no renames",
+			renames: []Rename{},
 		},
 		{
-			name: "single transform",
-			transforms: []Transform{
+			name: "single rename",
+			renames: []Rename{
 				{
 					Attributes: []Dimension{
 						{Name: "dimension.1"},
@@ -1322,8 +1322,8 @@ func TestValidateTransforms(t *testing.T) {
 			},
 		},
 		{
-			name: "transform catch-all case",
-			transforms: []Transform{
+			name: "rename catch-all case",
+			renames: []Rename{
 				{
 					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "new_calls_total",
@@ -1332,8 +1332,8 @@ func TestValidateTransforms(t *testing.T) {
 			},
 		},
 		{
-			name: "transform with two catch-all cases should error",
-			transforms: []Transform{
+			name: "rename with two catch-all cases should error",
+			renames: []Rename{
 				{
 					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "new_calls_total",
@@ -1345,11 +1345,11 @@ func TestValidateTransforms(t *testing.T) {
 					NewLatencyMetricName:    "new_latency",
 				},
 			},
-			expectedErr: "transforms: rename rule specified after catch-all case (0 attributes rule) is invalid",
+			expectedErr: "renames: rename rule specified after catch-all case (0 attributes rule) is invalid",
 		},
 		{
-			name: "transform with rule after catch-all cases should error",
-			transforms: []Transform{
+			name: "rename with rule after catch-all cases should error",
+			renames: []Rename{
 				{
 					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "new_calls_total",
@@ -1363,43 +1363,43 @@ func TestValidateTransforms(t *testing.T) {
 					NewLatencyMetricName:    "new_latency",
 				},
 			},
-			expectedErr: "transforms: rename rule specified after catch-all case (0 attributes rule) is invalid",
+			expectedErr: "renames: rename rule specified after catch-all case (0 attributes rule) is invalid",
 		},
 		{
-			name: "transform without new calls_total metric name should error",
-			transforms: []Transform{
+			name: "rename without new calls_total metric name should error",
+			renames: []Rename{
 				{
 					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "",
 					NewLatencyMetricName:    "new_latency",
 				},
 			},
-			expectedErr: "transforms: new metric name must be specified",
+			expectedErr: "renames: new metric name must be specified",
 		},
 		{
-			name: "transform without new latency metric name should error",
-			transforms: []Transform{
+			name: "rename without new latency metric name should error",
+			renames: []Rename{
 				{
 					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "new_calls_total",
 				},
 			},
-			expectedErr: "transforms: new metric name must be specified",
+			expectedErr: "renames: new metric name must be specified",
 		},
 		{
-			name: "transform without new metric name should error",
-			transforms: []Transform{
+			name: "rename without new metric name should error",
+			renames: []Rename{
 				{
 					Attributes: []Dimension{},
 				},
 			},
-			expectedErr: "transforms: new metric name must be specified",
+			expectedErr: "renames: new metric name must be specified",
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := validateTransforms(tc.transforms)
+			err := validateRenames(tc.renames)
 			if tc.expectedErr != "" {
 				assert.EqualError(t, err, tc.expectedErr)
 			} else {
@@ -1430,13 +1430,13 @@ func TestAllAttributesMatched(t *testing.T) {
 	for _, tc := range []struct {
 		name             string
 		metricAttributes *pdata.AttributeMap
-		transform        Transform
+		rename           Rename
 		expectedResult   bool
 	}{
 		{
-			name:             "transform that has no matches should not match",
+			name:             "rename that has no matches should not match",
 			metricAttributes: &attrMapMultipleAttr,
-			transform: Transform{
+			rename: Rename{
 				Attributes: []Dimension{
 					{Name: "key_that_doesnt_exist"},
 				},
@@ -1444,9 +1444,9 @@ func TestAllAttributesMatched(t *testing.T) {
 			expectedResult: false,
 		},
 		{
-			name:             "transform requires all attributes to be present to match - no match",
+			name:             "rename requires all attributes to be present to match - no match",
 			metricAttributes: &attrMapMultipleAttr,
-			transform: Transform{
+			rename: Rename{
 				Attributes: []Dimension{
 					{Name: "key1"},
 					{Name: "key_that_doesnt_exist"},
@@ -1455,9 +1455,9 @@ func TestAllAttributesMatched(t *testing.T) {
 			expectedResult: false,
 		},
 		{
-			name:             "transform requires all attributes to be present to match - match",
+			name:             "rename requires all attributes to be present to match - match",
 			metricAttributes: &attrMapMultipleAttr,
-			transform: Transform{
+			rename: Rename{
 				Attributes: []Dimension{
 					{Name: "key1"},
 					{Name: "key2"},
@@ -1468,7 +1468,7 @@ func TestAllAttributesMatched(t *testing.T) {
 		{
 			name:             "catch-all case should always match - some attributes on metric",
 			metricAttributes: &attrMapMultipleAttr,
-			transform: Transform{
+			rename: Rename{
 				Attributes: []Dimension{},
 			},
 			expectedResult: true,
@@ -1476,7 +1476,7 @@ func TestAllAttributesMatched(t *testing.T) {
 		{
 			name:             "catch-all case should always match - no attributes on metric",
 			metricAttributes: &attrMapNoAttrs,
-			transform: Transform{
+			rename: Rename{
 				Attributes: []Dimension{},
 			},
 			expectedResult: true,
@@ -1485,7 +1485,7 @@ func TestAllAttributesMatched(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			actualResult := tc.transform.allAttributesMatched(tc.metricAttributes)
+			actualResult := tc.rename.allAttributesMatched(tc.metricAttributes)
 			assert.Equal(t, tc.expectedResult, actualResult)
 		})
 	}
