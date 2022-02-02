@@ -87,13 +87,13 @@ type serviceSpans struct {
 }
 
 type span struct {
-	operation             string
-	kind                  pdata.SpanKind
-	statusCode            pdata.StatusCode
-	spanID                pdata.SpanID
-	traceID               pdata.TraceID
-	startTime             pdata.Timestamp
-	endTime               pdata.Timestamp
+	operation  string
+	kind       pdata.SpanKind
+	statusCode pdata.StatusCode
+	spanID     pdata.SpanID
+	traceID    pdata.TraceID
+	startTime  pdata.Timestamp
+	endTime    pdata.Timestamp
 }
 
 func TestProcessorStart(t *testing.T) {
@@ -379,7 +379,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			traces: []pdata.Traces{spanWithLargeTimestamp},
 		},
 		{
-			name:                   "Test that metric renaming works",
+			name:                   "Test that metric renaming works - user defined",
 			aggregationTemporality: delta,
 			verifier: func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
 				rm := input.ResourceMetrics()
@@ -406,6 +406,30 @@ func TestProcessorConsumeTraces(t *testing.T) {
 					},
 					NewCallsTotalMetricName: "new_name_calls_total",
 					NewLatencyMetricName:    "new_name_latency",
+				},
+			},
+		},
+		{
+			name:                   "Test that metric renaming works - default (no matches)",
+			aggregationTemporality: delta,
+			verifier: func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+				rm := input.ResourceMetrics()
+				callsTotalMetrics := rm.At(0).InstrumentationLibraryMetrics().At(0).Metrics()
+				assert.Equal(t, defaultCallsTotalMetricName, callsTotalMetrics.At(0).Name())
+
+				latencyMetrics := rm.At(0).InstrumentationLibraryMetrics().At(1).Metrics()
+				assert.Equal(t, defaultLatencyMetricName, latencyMetrics.At(0).Name())
+
+				return true
+			},
+			traces: []pdata.Traces{spanWithLargeTimestamp},
+			transforms: []Transform{
+				{
+					Attributes: []Dimension{
+						{Name: "key_that_does_not_exist"},
+					},
+					NewCallsTotalMetricName: "this_should_not_match_calls_total",
+					NewLatencyMetricName:    "this_should_not_occur_latency",
 				},
 			},
 		},
@@ -1385,7 +1409,7 @@ func TestValidateTransforms(t *testing.T) {
 	}
 }
 
-func TestAttributesMatched(t *testing.T) {
+func TestAllAttributesMatched(t *testing.T) {
 	// no attributes
 	attrMapNoAttrs := pdata.NewAttributeMap()
 
@@ -1461,7 +1485,7 @@ func TestAttributesMatched(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			actualResult := tc.transform.attributesMatched(tc.metricAttributes)
+			actualResult := tc.transform.allAttributesMatched(tc.metricAttributes)
 			assert.Equal(t, tc.expectedResult, actualResult)
 		})
 	}

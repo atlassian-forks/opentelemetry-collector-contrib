@@ -410,7 +410,7 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 
 			mLatency.SetName(defaultLatencyMetricName)
 			for _, transform := range p.transforms {
-				if transform.attributesMatched(dimensions) {
+				if transform.allAttributesMatched(dimensions) {
 					mLatency.SetName(transform.NewLatencyMetricName)
 					break
 				}
@@ -450,7 +450,7 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 
 			mCalls.SetName(defaultCallsTotalMetricName)
 			for _, transform := range p.transforms {
-				if transform.attributesMatched(dimensions) {
+				if transform.allAttributesMatched(dimensions) {
 					mCalls.SetName(transform.NewCallsTotalMetricName)
 					break
 				}

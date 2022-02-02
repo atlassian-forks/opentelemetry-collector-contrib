@@ -103,7 +103,7 @@ type Transform struct {
 	NewLatencyMetricName    string      `mapstructure:"new_latency_metric_name"`
 }
 
-func (t Transform) attributesMatched(attributesOnMetric *pdata.AttributeMap) bool {
+func (t Transform) allAttributesMatched(attributesOnMetric *pdata.AttributeMap) bool {
 	// If no attribute specified then it is the default/ catch-all case
 	if len(t.Attributes) == 0 {
 		return true
