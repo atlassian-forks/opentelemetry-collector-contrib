@@ -569,7 +569,7 @@ func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, la
 		p.latencyBucketCounts[rKey][instrLibName] = make(map[metricKey][]uint64)
 	}
 	if _, ok := p.latencyBucketCounts[rKey][instrLibName][mKey]; !ok {
-		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds))
+		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds) + 1)
 	}
 	p.latencyBucketCounts[rKey][instrLibName][mKey][index]++
 
