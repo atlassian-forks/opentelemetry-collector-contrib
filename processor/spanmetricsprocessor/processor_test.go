@@ -17,9 +17,10 @@ package spanmetricsprocessor
 import (
 	"context"
 	"fmt"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
 	"testing"
 	"time"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor/internal/featureflag"
 
 	tracetranslator "go.opentelemetry.io/collector/translator/trace"
 
@@ -341,6 +342,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 		aggregationTemporality string
 		verifier               func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool
 		traces                 []pdata.Traces
+		renames                []Rename
 	}{
 		{
 			name:                   "Test single consumption, three spans (Cumulative).",
@@ -376,6 +378,61 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			},
 			traces: []pdata.Traces{spanWithLargeTimestamp},
 		},
+		{
+			name:                   "Test that metric renaming works - user defined",
+			aggregationTemporality: delta,
+			verifier: func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+				rm := input.ResourceMetrics()
+				callsTotalMetrics := rm.At(0).InstrumentationLibraryMetrics().At(0).Metrics()
+				assert.Equal(t, "new_name_calls_total", callsTotalMetrics.At(0).Name())
+
+				latencyMetrics := rm.At(0).InstrumentationLibraryMetrics().At(1).Metrics()
+				assert.Equal(t, "new_name_latency", latencyMetrics.At(0).Name())
+
+				return true
+			},
+			traces: []pdata.Traces{spanWithLargeTimestamp},
+			renames: []Rename{
+				{
+					Attributes: []Dimension{
+						{Name: "key_that_does_not_exist"},
+					},
+					NewCallsTotalMetricName: "this_should_not_match_calls_total",
+					NewLatencyMetricName:    "this_should_not_occur_latency",
+				},
+				{
+					Attributes: []Dimension{
+						{Name: stringAttrName},
+					},
+					NewCallsTotalMetricName: "new_name_calls_total",
+					NewLatencyMetricName:    "new_name_latency",
+				},
+			},
+		},
+		{
+			name:                   "Test that metric renaming works - default (no matches)",
+			aggregationTemporality: delta,
+			verifier: func(t testing.TB, input pdata.Metrics, attachSpanAndTraceID bool, expectedSpanAndTraceIDs map[string]int) bool {
+				rm := input.ResourceMetrics()
+				callsTotalMetrics := rm.At(0).InstrumentationLibraryMetrics().At(0).Metrics()
+				assert.Equal(t, defaultCallsTotalMetricName, callsTotalMetrics.At(0).Name())
+
+				latencyMetrics := rm.At(0).InstrumentationLibraryMetrics().At(1).Metrics()
+				assert.Equal(t, defaultLatencyMetricName, latencyMetrics.At(0).Name())
+
+				return true
+			},
+			traces: []pdata.Traces{spanWithLargeTimestamp},
+			renames: []Rename{
+				{
+					Attributes: []Dimension{
+						{Name: "key_that_does_not_exist"},
+					},
+					NewCallsTotalMetricName: "this_should_not_match_calls_total",
+					NewLatencyMetricName:    "this_should_not_occur_latency",
+				},
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -398,6 +455,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 				temporality:                       tc.aggregationTemporality,
 				attachSpanAndTraceID:              false,
 				inheritInstrumentationLibraryName: false,
+				renames:                           tc.renames,
 			})
 
 			for _, traces := range tc.traces {
@@ -692,6 +750,7 @@ type processorConfig struct {
 	attachSpanAndTraceID              bool
 	inheritInstrumentationLibraryName bool
 	ff                                featureflag.FeatureFlag
+	renames                           []Rename
 }
 
 type mockedFF struct {
@@ -765,6 +824,7 @@ func newProcessorImp(tb testing.TB, mexp *mocks.MetricsExporter, tcon *mocks.Tra
 		metricKeyToDimensions:             metricKeyToDimensions,
 		inheritInstrumentationLibraryName: inheritInstrumentationLibraryName,
 		featureFlag:                       ff,
+		renames:                           pConf.renames,
 	}
 }
 
@@ -1240,6 +1300,199 @@ func TestProcessorDuplicateResourceAttributes(t *testing.T) {
 	p, err := newProcessor(zap.NewNop(), cfg, next)
 	assert.Error(t, err)
 	assert.Nil(t, p)
+}
+
+func TestValidateRenames(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		renames     []Rename
+		expectedErr string
+	}{
+		{
+			name:    "no renames",
+			renames: []Rename{},
+		},
+		{
+			name: "single rename",
+			renames: []Rename{
+				{
+					Attributes: []Dimension{
+						{Name: "dimension.1"},
+						{Name: "dimension.2"},
+					},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+		},
+		{
+			name: "rename catch-all case",
+			renames: []Rename{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+		},
+		{
+			name: "rename with two catch-all cases should error",
+			renames: []Rename{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "renames: rename rule specified after catch-all case (0 attributes rule) is invalid",
+		},
+		{
+			name: "rename with rule after catch-all cases should error",
+			renames: []Rename{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+				{
+					Attributes: []Dimension{
+						{Name: "dimension.1"},
+					},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "renames: rename rule specified after catch-all case (0 attributes rule) is invalid",
+		},
+		{
+			name: "rename without new calls_total metric name should error",
+			renames: []Rename{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "renames: new metric name must be specified",
+		},
+		{
+			name: "rename without new latency metric name should error",
+			renames: []Rename{
+				{
+					Attributes:              []Dimension{},
+					NewCallsTotalMetricName: "new_calls_total",
+				},
+			},
+			expectedErr: "renames: new metric name must be specified",
+		},
+		{
+			name: "rename without new metric name should error",
+			renames: []Rename{
+				{
+					Attributes: []Dimension{},
+				},
+			},
+			expectedErr: "renames: new metric name must be specified",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateRenames(tc.renames)
+			if tc.expectedErr != "" {
+				assert.EqualError(t, err, tc.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAllAttributesMatched(t *testing.T) {
+	// no attributes
+	attrMapNoAttrs := pdata.NewAttributeMap()
+
+	// one attribute
+	attrMapOneAttr := pdata.NewAttributeMap()
+	attrMapOneAttr.InitFromMap(map[string]pdata.AttributeValue{
+		"onekey": pdata.NewAttributeValueString("onevalue"),
+	})
+
+	// multiple attributes
+	attrMapMultipleAttr := pdata.NewAttributeMap()
+	attrMapMultipleAttr.InitFromMap(map[string]pdata.AttributeValue{
+		"key1": pdata.NewAttributeValueString("value1"),
+		"key2": pdata.NewAttributeValueString("value2"),
+		"key3": pdata.NewAttributeValueString("value3"),
+	})
+
+	for _, tc := range []struct {
+		name             string
+		metricAttributes *pdata.AttributeMap
+		rename           Rename
+		expectedResult   bool
+	}{
+		{
+			name:             "rename that has no matches should not match",
+			metricAttributes: &attrMapMultipleAttr,
+			rename: Rename{
+				Attributes: []Dimension{
+					{Name: "key_that_doesnt_exist"},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:             "rename requires all attributes to be present to match - no match",
+			metricAttributes: &attrMapMultipleAttr,
+			rename: Rename{
+				Attributes: []Dimension{
+					{Name: "key1"},
+					{Name: "key_that_doesnt_exist"},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:             "rename requires all attributes to be present to match - match",
+			metricAttributes: &attrMapMultipleAttr,
+			rename: Rename{
+				Attributes: []Dimension{
+					{Name: "key1"},
+					{Name: "key2"},
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			name:             "catch-all case should always match - some attributes on metric",
+			metricAttributes: &attrMapMultipleAttr,
+			rename: Rename{
+				Attributes: []Dimension{},
+			},
+			expectedResult: true,
+		},
+		{
+			name:             "catch-all case should always match - no attributes on metric",
+			metricAttributes: &attrMapNoAttrs,
+			rename: Rename{
+				Attributes: []Dimension{},
+			},
+			expectedResult: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			actualResult := tc.rename.allAttributesMatched(tc.metricAttributes)
+			assert.Equal(t, tc.expectedResult, actualResult)
+		})
+	}
 }
 
 func TestValidateDimensions(t *testing.T) {

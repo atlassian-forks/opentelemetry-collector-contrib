@@ -50,6 +50,9 @@ const (
 
 	defaultDimensionsCacheSize         = 1000
 	defaultResourceAttributesCacheSize = 1000
+
+	defaultCallsTotalMetricName = "calls_total"
+	defaultLatencyMetricName    = "latency"
 )
 
 var (
@@ -122,6 +125,9 @@ type processorImp struct {
 
 	// LaunchDarkly feature flag
 	featureFlag featureflag.FeatureFlag
+
+	// renames defines the metric renaming configuration
+	renames []Rename
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -137,6 +143,10 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 	if err := validateDimensions(pConfig.ResourceAttributes, []string{serviceNameKey}); err != nil {
+		return nil, err
+	}
+
+	if err := validateRenames(pConfig.Renames); err != nil {
 		return nil, err
 	}
 
@@ -176,6 +186,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 		featureFlag:                       ff,
+		renames:                           pConfig.Renames,
 	}, nil
 }
 
@@ -191,6 +202,29 @@ func mapDurationsToMillis(vs []time.Duration) []float64 {
 		vsm[i] = durationToMillis(v)
 	}
 	return vsm
+}
+
+// validateRenames checks that a user only specifies one catch-all case as the last item declared in the renames config.
+// It also checks that the user has specified both metric names to be renamed.
+func validateRenames(renames []Rename) error {
+	hasDefault := false
+	for _, rename := range renames {
+		// can not specify a rename rule after a default catch-all case is specified
+		// this is because the rename occurs on a first match basis, meaning that the catch-all will always
+		// be executed and the rest ignored.
+		if hasDefault {
+			return fmt.Errorf("renames: rename rule specified after catch-all case (0 attributes rule) is invalid")
+		}
+
+		if len(rename.Attributes) == 0 {
+			hasDefault = true
+		}
+
+		if rename.NewCallsTotalMetricName == "" || rename.NewLatencyMetricName == "" {
+			return fmt.Errorf("renames: new metric name must be specified")
+		}
+	}
+	return nil
 }
 
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions. Considering
@@ -348,7 +382,6 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 		for mKey := range p.latencyCount[resAttrKey][libKey] {
 			mLatency := ilm.Metrics().AppendEmpty()
 			mLatency.SetDataType(pdata.MetricDataTypeHistogram)
-			mLatency.SetName("latency")
 			mLatency.Histogram().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
 			timestamp := pdata.TimestampFromTime(time.Now())
@@ -369,6 +402,14 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 				return err
 			}
 
+			mLatency.SetName(defaultLatencyMetricName)
+			for _, rename := range p.renames {
+				if rename.allAttributesMatched(dimensions) {
+					mLatency.SetName(rename.NewLatencyMetricName)
+					break
+				}
+			}
+
 			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
 				dpLatency.LabelsMap().Upsert(k, tracetranslator.AttributeValueToString(v))
 				return true
@@ -387,7 +428,6 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 		for mKey := range p.callSum[resAttrKey][libKey] {
 			mCalls := ilm.Metrics().AppendEmpty()
 			mCalls.SetDataType(pdata.MetricDataTypeIntSum)
-			mCalls.SetName("calls_total")
 			mCalls.IntSum().SetIsMonotonic(true)
 			mCalls.IntSum().SetAggregationTemporality(p.config.GetAggregationTemporality())
 
@@ -400,6 +440,14 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 			if err != nil {
 				p.logger.Error(err.Error())
 				return err
+			}
+
+			mCalls.SetName(defaultCallsTotalMetricName)
+			for _, rename := range p.renames {
+				if rename.allAttributesMatched(dimensions) {
+					mCalls.SetName(rename.NewCallsTotalMetricName)
+					break
+				}
 			}
 
 			dimensions.Range(func(k string, v pdata.AttributeValue) bool {
