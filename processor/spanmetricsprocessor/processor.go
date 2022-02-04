@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -127,7 +128,10 @@ type processorImp struct {
 	featureFlag featureflag.FeatureFlag
 
 	// renames defines the metric renaming configuration
-	renames []Rename
+	renames []internalRename
+
+	// stores mapping of regex in string form to object form
+	regexStrToObj map[string]*regexp.Regexp
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -146,6 +150,11 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 
+	if err := validateRenames(pConfig.Renames); err != nil {
+		return nil, err
+	}
+
+	internalRename, err := buildInternalRename(pConfig.Renames)
 	if err := validateRenames(pConfig.Renames); err != nil {
 		return nil, err
 	}
@@ -186,7 +195,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 		featureFlag:                       ff,
-		renames:                           pConfig.Renames,
+		renames:                           internalRename,
 	}, nil
 }
 
@@ -223,8 +232,49 @@ func validateRenames(renames []Rename) error {
 		if rename.NewCallsTotalMetricName == "" || rename.NewLatencyMetricName == "" {
 			return fmt.Errorf("renames: new metric name must be specified")
 		}
+
+		for _, attribute := range rename.Attributes {
+			regexStr := attribute.AttributeValueRegex
+			_, err := regexp.Compile(regexStr)
+			if err != nil {
+				return fmt.Errorf("renames: invalid regex specified for attribute key %s", attribute.Attribute.Name)
+			}
+		}
 	}
 	return nil
+}
+
+func buildInternalRename(renames []Rename) ([]internalRename, error) {
+	var internalRenames []internalRename
+
+	for _, rename := range renames {
+		newInternalAttributeRename := make([]internalAttributeRename, len(rename.Attributes))
+		for _, attribute := range rename.Attributes {
+			regexObj, err := regexp.Compile(attribute.AttributeValueRegex)
+			// should never happen as `validateRenames` function validates for errors
+			if err != nil {
+				return nil, fmt.Errorf("renames: invalid regex specified for attribute key %s", attribute.Attribute.Name)
+			}
+
+			// newInternalAttributeRename.regex = regexObj
+			append(newInternalAttributeRename, internalAttributeRename{
+				attribute.Attribute,
+				regexObj,
+			})
+		}
+
+		newInternalRename := internalRename{
+			Attributes:              newInternalAttributeRename,
+			NewCallsTotalMetricName: rename.NewCallsTotalMetricName,
+			NewLatencyMetricName:    rename.NewLatencyMetricName,
+		}
+
+		internalRenames = append(internalRenames, newInternalRename)
+	}
+
+	// regexStrToObj := make(map[string]*regexp.Regexp)
+
+	return internalRenames, nil
 }
 
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions. Considering
@@ -611,7 +661,7 @@ func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, la
 		p.latencyBucketCounts[rKey][instrLibName] = make(map[metricKey][]uint64)
 	}
 	if _, ok := p.latencyBucketCounts[rKey][instrLibName][mKey]; !ok {
-		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds) + 1)
+		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds)+1)
 	}
 	p.latencyBucketCounts[rKey][instrLibName][mKey][index]++
 

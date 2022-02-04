@@ -15,6 +15,7 @@
 package spanmetricsprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor"
 
 import (
+	"regexp"
 	"time"
 
 	"go.opentelemetry.io/collector/config"
@@ -98,24 +99,48 @@ type Config struct {
 // `NewCallsTotalMetricName` and `NewLatencyMetricName` are mandatory arguments that can not be empty.
 // If no attributes are specified, then all metrics will be caught under this case and renamed.
 type Rename struct {
-	Attributes              []Dimension `mapstructure:"attributes"`
-	NewCallsTotalMetricName string      `mapstructure:"new_calls_total_metric_name"`
-	NewLatencyMetricName    string      `mapstructure:"new_latency_metric_name"`
+	Attributes              []AttributeRename `mapstructure:"attributes"`
+	NewCallsTotalMetricName string            `mapstructure:"new_calls_total_metric_name"`
+	NewLatencyMetricName    string            `mapstructure:"new_latency_metric_name"`
 }
 
-func (t Rename) allAttributesMatched(attributesOnMetric *pdata.AttributeMap) bool {
+type AttributeRename struct {
+	Attribute           Dimension
+	AttributeValueRegex string
+}
+
+type internalRename struct {
+	Attributes              []internalAttributeRename
+	NewCallsTotalMetricName string
+	NewLatencyMetricName    string
+}
+
+type internalAttributeRename struct {
+	Attribute           Dimension
+	AttributeValueRegex *regexp.Regexp
+}
+
+func (r internalRename) allAttributesMatched(attributesOnMetric *pdata.AttributeMap) bool {
 	// If no attribute specified then it is the default/ catch-all case
-	if len(t.Attributes) == 0 {
+	if len(r.Attributes) == 0 {
 		return true
 	}
 
 	// check if all attributes specified to match on in rename exists on attributes that will be attached to metric
-	for _, attribute := range t.Attributes {
-		_, found := attributesOnMetric.Get(attribute.Name)
+	for _, attribute := range r.Attributes {
+		value, found := attributesOnMetric.Get(attribute.Attribute.Name)
 
+		// check if attribute exists
 		if !found {
 			return false
 		}
+
+		//check if value matches specified regex
+		matched := attribute.AttributeValueRegex.Match([]byte(value.StringVal()))
+		if !matched {
+			return false
+		}
+
 	}
 
 	return true
