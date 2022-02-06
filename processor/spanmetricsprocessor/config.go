@@ -99,23 +99,23 @@ type Config struct {
 // `NewCallsTotalMetricName` and `NewLatencyMetricName` are mandatory arguments that can not be empty.
 // If no attributes are specified, then all metrics will be caught under this case and renamed.
 type Rename struct {
-	Attributes              []AttributeRename `mapstructure:"attributes"`
-	NewCallsTotalMetricName string            `mapstructure:"new_calls_total_metric_name"`
-	NewLatencyMetricName    string            `mapstructure:"new_latency_metric_name"`
+	Attributes              []AttributeRenameMatchValues `mapstructure:"attributes"`
+	NewCallsTotalMetricName string                       `mapstructure:"new_calls_total_metric_name"`
+	NewLatencyMetricName    string                       `mapstructure:"new_latency_metric_name"`
 }
 
-type AttributeRename struct {
+type AttributeRenameMatchValues struct {
 	Attribute           Dimension
 	AttributeValueRegex string
 }
 
 type internalRename struct {
-	Attributes              []internalAttributeRename
+	Attributes              []internalAttributeRenameMatchValues
 	NewCallsTotalMetricName string
 	NewLatencyMetricName    string
 }
 
-type internalAttributeRename struct {
+type internalAttributeRenameMatchValues struct {
 	Attribute           Dimension
 	AttributeValueRegex *regexp.Regexp
 }

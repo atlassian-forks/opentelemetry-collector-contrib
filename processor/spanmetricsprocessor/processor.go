@@ -248,7 +248,7 @@ func buildInternalRename(renames []Rename) ([]internalRename, error) {
 	var internalRenames []internalRename
 
 	for _, rename := range renames {
-		newInternalAttributeRename := make([]internalAttributeRename, len(rename.Attributes))
+		newInternalAttributeRenameMatchValues := make([]internalAttributeRenameMatchValues, len(rename.Attributes))
 		for _, attribute := range rename.Attributes {
 			regexObj, err := regexp.Compile(attribute.AttributeValueRegex)
 			// should never happen as `validateRenames` function validates for errors
@@ -257,14 +257,14 @@ func buildInternalRename(renames []Rename) ([]internalRename, error) {
 			}
 
 			// newInternalAttributeRename.regex = regexObj
-			append(newInternalAttributeRename, internalAttributeRename{
+			append(newInternalAttributeRenameMatchValues, internalAttributeRenameMatchValues) {
 				attribute.Attribute,
 				regexObj,
 			})
 		}
 
 		newInternalRename := internalRename{
-			Attributes:              newInternalAttributeRename,
+			Attributes:              newInternalAttributeRenameMatchValues,
 			NewCallsTotalMetricName: rename.NewCallsTotalMetricName,
 			NewLatencyMetricName:    rename.NewLatencyMetricName,
 		}
