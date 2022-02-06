@@ -256,8 +256,8 @@ func buildInternalRename(renames []Rename) ([]internalRename, error) {
 				return nil, fmt.Errorf("renames: invalid regex specified for attribute key %s", attribute.Attribute.Name)
 			}
 
-			// newInternalAttributeRename.regex = regexObj
-			append(newInternalAttributeRenameMatchValues, internalAttributeRenameMatchValues) {
+			// build rename structure with regex object
+			newInternalAttributeRenameMatchValues = append(newInternalAttributeRenameMatchValues, internalAttributeRenameMatchValues{
 				attribute.Attribute,
 				regexObj,
 			})

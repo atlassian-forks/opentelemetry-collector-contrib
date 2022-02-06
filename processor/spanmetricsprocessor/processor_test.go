@@ -978,7 +978,7 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTem
 		}
 
 		// Then verify len(bucketCounts) == len(ExplicitBounds) + 1
-		assert.Equal(t, len(dp.ExplicitBounds()) +1, len(dp.BucketCounts()))
+		assert.Equal(t, len(dp.ExplicitBounds())+1, len(dp.BucketCounts()))
 
 		verifyMetricLabels(dp, t, seenMetricIDs, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
