@@ -154,8 +154,12 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 
-	internalRename, err := buildInternalRename(pConfig.Renames)
 	if err := validateRenames(pConfig.Renames); err != nil {
+		return nil, err
+	}
+
+	internalRename, err := buildInternalRename(pConfig.Renames)
+	if err != nil {
 		return nil, err
 	}
 
@@ -271,8 +275,6 @@ func buildInternalRename(renames []Rename) ([]internalRename, error) {
 
 		internalRenames = append(internalRenames, newInternalRename)
 	}
-
-	// regexStrToObj := make(map[string]*regexp.Regexp)
 
 	return internalRenames, nil
 }
