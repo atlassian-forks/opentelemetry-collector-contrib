@@ -105,8 +105,8 @@ type Rename struct {
 }
 
 type AttributeRenameMatchValues struct {
-	Attribute           Dimension
-	AttributeValueRegex string
+	Attribute           Dimension `mapstructure:"attribute"`
+	AttributeValueRegex string    `mapstructure:"attribute_value_regex"`
 }
 
 type internalRename struct {
