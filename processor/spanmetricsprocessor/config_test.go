@@ -50,6 +50,7 @@ func TestLoadConfig(t *testing.T) {
 		wantInheritInstrumentationLibraryName bool
 		wantEnableFeatureFlag                 bool
 		wantLaunchDarklyKey                   string
+		wantRenames                           []Rename
 	}{
 		{
 			configFile:                            "config-2-pipelines.yaml",
@@ -100,6 +101,20 @@ func TestLoadConfig(t *testing.T) {
 			wantInheritInstrumentationLibraryName: false,
 			wantEnableFeatureFlag:                 false,
 			wantLaunchDarklyKey:                   "",
+			wantRenames: []Rename{
+				{
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: "http.method",
+							},
+							AttributeValueRegex: ".*",
+						},
+					},
+					NewCallsTotalMetricName: "http.server.requests",
+					NewLatencyMetricName:    "http.server.duration",
+				},
+			},
 		},
 	}
 	for _, tc := range testcases {
@@ -140,6 +155,7 @@ func TestLoadConfig(t *testing.T) {
 					InheritInstrumentationLibraryName: tc.wantInheritInstrumentationLibraryName,
 					EnableFeatureFlag:                 tc.wantEnableFeatureFlag,
 					LaunchDarklyKey:                   tc.wantLaunchDarklyKey,
+					Renames:                           tc.wantRenames,
 				},
 				cfg.Processors[config.NewID(typeStr)],
 			)

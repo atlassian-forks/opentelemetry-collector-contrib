@@ -131,7 +131,8 @@ processors:
     inherit_instrumentation_library_name: true
     renames:
       - attributes:
-        - attribute: http.method
+        - attribute:
+            name: http.method
           attribute_value_regex: ".*"
         new_calls_total_metric_name: http.server.requests
         new_latency_metric_name: http.server.duration
