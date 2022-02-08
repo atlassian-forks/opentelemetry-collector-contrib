@@ -105,22 +105,12 @@ type Rename struct {
 }
 
 type AttributeRenameMatchValues struct {
-	Attribute           Dimension `mapstructure:"attribute"`
-	AttributeValueRegex string    `mapstructure:"attribute_value_regex"`
+	Attribute              Dimension `mapstructure:"attribute"`
+	AttributeValueRegex    string    `mapstructure:"attribute_value_regex"`
+	AttributeValueRegexObj *regexp.Regexp
 }
 
-type internalRename struct {
-	Attributes              []internalAttributeRenameMatchValues
-	NewCallsTotalMetricName string
-	NewLatencyMetricName    string
-}
-
-type internalAttributeRenameMatchValues struct {
-	Attribute           Dimension
-	AttributeValueRegex *regexp.Regexp
-}
-
-func (r internalRename) allAttributesMatched(attributesOnMetric *pdata.AttributeMap) bool {
+func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) bool {
 	// If no attribute specified then it is the default/ catch-all case
 	if len(r.Attributes) == 0 {
 		return true
@@ -136,7 +126,7 @@ func (r internalRename) allAttributesMatched(attributesOnMetric *pdata.Attribute
 		}
 
 		//check if value matches specified regex
-		matched := attribute.AttributeValueRegex.Match([]byte(value.StringVal()))
+		matched := attribute.AttributeValueRegexObj.Match([]byte(value.StringVal()))
 		if !matched {
 			return false
 		}
