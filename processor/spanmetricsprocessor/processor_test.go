@@ -1724,11 +1724,6 @@ func TestBuildRegex(t *testing.T) {
 	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[0].AttributeValueRegexObj.String())
 	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[1].AttributeValueRegexObj.String())
 	require.Equal(t, matchSpecificRegex.String(), renames[1].Attributes[0].AttributeValueRegexObj.String())
-	// for _, rename := range renames {
-	// 	for _, attribute := range rename.Attributes {
-	// 		require.NotEmpty(t, attribute.AttributeValueRegexObj)
-	// 	}
-	// }
 }
 
 func TestFeatureFlag(t *testing.T) {
