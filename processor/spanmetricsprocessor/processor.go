@@ -158,9 +158,11 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		return nil, err
 	}
 
-	rename, err := buildRegexObjOnRename(pConfig.Renames)
-	if err != nil {
-		return nil, err
+	for _, rename := range pConfig.Renames {
+		err := rename.buildRegex()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	metricKeyToDimensionsCache, err := cache.NewCache(pConfig.DimensionsCacheSize)
@@ -199,7 +201,7 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 		attachSpanAndTraceID:              pConfig.AttachSpanAndTraceID,
 		inheritInstrumentationLibraryName: pConfig.InheritInstrumentationLibraryName,
 		featureFlag:                       ff,
-		renames:                           rename,
+		renames:                           pConfig.Renames,
 	}, nil
 }
 
@@ -246,22 +248,6 @@ func validateRenames(renames []Rename) error {
 		}
 	}
 	return nil
-}
-
-func buildRegexObjOnRename(renames []Rename) ([]Rename, error) {
-	for renameIndex, rename := range renames {
-		for renameMatchValIndex, attributeRenameMatchVal := range rename.Attributes {
-			regexObj, err := regexp.Compile(attributeRenameMatchVal.AttributeValueRegex)
-			// should never happen as `validateRenames` function validates for errors
-			if err != nil {
-				return nil, fmt.Errorf("renames: invalid regex specified for attribute key %s", attributeRenameMatchVal.Attribute.Name)
-			}
-
-			renames[renameIndex].Attributes[renameMatchValIndex].AttributeValueRegexObj = regexObj
-		}
-	}
-
-	return renames, nil
 }
 
 // validateDimensions checks duplicates for reserved dimensions and additional dimensions. Considering

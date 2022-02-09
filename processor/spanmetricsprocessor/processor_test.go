@@ -1675,6 +1675,62 @@ func TestValidateDimensions(t *testing.T) {
 	}
 }
 
+func TestBuildRegex(t *testing.T) {
+	matchAllRegex, err := regexp.Compile(".*")
+	if err != nil {
+		panic(err)
+	}
+	matchSpecificRegex, err := regexp.Compile("abc123")
+	if err != nil {
+		panic(err)
+	}
+
+	renames := []Rename{
+		{
+			Attributes: []AttributeRenameMatchValues{
+				{
+					Attribute: Dimension{
+						Name: "dim1",
+					},
+					AttributeValueRegex: ".*",
+				},
+				{
+					Attribute: Dimension{
+						Name: "dim2",
+					},
+					AttributeValueRegex: ".*",
+				},
+			},
+		},
+		{
+			Attributes: []AttributeRenameMatchValues{
+				{
+					Attribute: Dimension{
+						Name: "dim3",
+					},
+					AttributeValueRegex: "abc123",
+				},
+			},
+		},
+	}
+
+	for _, rename := range renames {
+		err := rename.buildRegex()
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[0].AttributeValueRegexObj.String())
+	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[1].AttributeValueRegexObj.String())
+	require.Equal(t, matchSpecificRegex.String(), renames[1].Attributes[0].AttributeValueRegexObj.String())
+	// for _, rename := range renames {
+	// 	for _, attribute := range rename.Attributes {
+	// 		require.NotEmpty(t, attribute.AttributeValueRegexObj)
+	// 	}
+	// }
+}
+
 func TestFeatureFlag(t *testing.T) {
 	// Prepare
 	mexp := &mocks.MetricsExporter{}

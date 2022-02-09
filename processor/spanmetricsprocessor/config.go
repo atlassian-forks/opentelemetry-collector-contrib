@@ -15,6 +15,7 @@
 package spanmetricsprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor"
 
 import (
+	"fmt"
 	"regexp"
 	"time"
 
@@ -108,6 +109,20 @@ type AttributeRenameMatchValues struct {
 	Attribute              Dimension `mapstructure:"attribute"`
 	AttributeValueRegex    string    `mapstructure:"attribute_value_regex"`
 	AttributeValueRegexObj *regexp.Regexp
+}
+
+func (r *Rename) buildRegex() error {
+	for renameMatchValIndex, attributeRenameMatchVal := range r.Attributes {
+		regexObj, err := regexp.Compile(attributeRenameMatchVal.AttributeValueRegex)
+		// should never happen as `validateRenames` function validates for errors
+		if err != nil {
+			return fmt.Errorf("renames: invalid regex specified for attribute key %s", attributeRenameMatchVal.Attribute.Name)
+		}
+
+		r.Attributes[renameMatchValIndex].AttributeValueRegexObj = regexObj
+	}
+
+	return nil
 }
 
 func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) bool {
