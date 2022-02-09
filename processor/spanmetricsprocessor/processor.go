@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -128,6 +129,9 @@ type processorImp struct {
 
 	// renames defines the metric renaming configuration
 	renames []Rename
+
+	// stores mapping of regex in string form to object form
+	regexStrToObj map[string]*regexp.Regexp
 }
 
 func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer consumer.Traces) (*processorImp, error) {
@@ -148,6 +152,17 @@ func newProcessor(logger *zap.Logger, config config.Processor, nextConsumer cons
 
 	if err := validateRenames(pConfig.Renames); err != nil {
 		return nil, err
+	}
+
+	if err := validateRenames(pConfig.Renames); err != nil {
+		return nil, err
+	}
+
+	for _, rename := range pConfig.Renames {
+		err := rename.buildRegex()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	metricKeyToDimensionsCache, err := cache.NewCache(pConfig.DimensionsCacheSize)
@@ -222,6 +237,14 @@ func validateRenames(renames []Rename) error {
 
 		if rename.NewCallsTotalMetricName == "" || rename.NewLatencyMetricName == "" {
 			return fmt.Errorf("renames: new metric name must be specified")
+		}
+
+		for _, attribute := range rename.Attributes {
+			regexStr := attribute.AttributeValueRegex
+			_, err := regexp.Compile(regexStr)
+			if err != nil {
+				return fmt.Errorf("renames: invalid regex specified for attribute key %s", attribute.Attribute.Name)
+			}
 		}
 	}
 	return nil
@@ -404,7 +427,7 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 
 			mLatency.SetName(defaultLatencyMetricName)
 			for _, rename := range p.renames {
-				if rename.allAttributesMatched(dimensions) {
+				if rename.allAttributesKVMatched(dimensions) {
 					mLatency.SetName(rename.NewLatencyMetricName)
 					break
 				}
@@ -444,7 +467,7 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 
 			mCalls.SetName(defaultCallsTotalMetricName)
 			for _, rename := range p.renames {
-				if rename.allAttributesMatched(dimensions) {
+				if rename.allAttributesKVMatched(dimensions) {
 					mCalls.SetName(rename.NewCallsTotalMetricName)
 					break
 				}
@@ -611,7 +634,7 @@ func (p *processorImp) updateLatencyMetrics(rKey resourceKey, mKey metricKey, la
 		p.latencyBucketCounts[rKey][instrLibName] = make(map[metricKey][]uint64)
 	}
 	if _, ok := p.latencyBucketCounts[rKey][instrLibName][mKey]; !ok {
-		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds) + 1)
+		p.latencyBucketCounts[rKey][instrLibName][mKey] = make([]uint64, len(p.latencyBounds)+1)
 	}
 	p.latencyBucketCounts[rKey][instrLibName][mKey][index]++
 

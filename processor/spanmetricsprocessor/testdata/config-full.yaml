@@ -70,6 +70,15 @@ processors:
     # The aggregation temporality of the generated metrics.
     # Default: "AGGREGATION_TEMPORALITY_CUMULATIVE"
     aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"
+    # rename any metrics with http.method attribute key to `http.server.requests` and `http.server.duration`
+    # for `calls_total` and `latency` metrics respectively
+    renames:
+      - attributes:
+        - attribute:
+            name: http.method
+          attribute_value_regex: ".*"
+        new_calls_total_metric_name: http.server.requests
+        new_latency_metric_name: http.server.duration
 
 service:
   pipelines:

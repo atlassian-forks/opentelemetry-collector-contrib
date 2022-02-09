@@ -83,6 +83,8 @@ The following settings can be optionally configured:
 
 - `launch_darkly_key`: defines the LaunchDarkly key. Optional. Only required when `EnableFeatureFlag` is `true`.
 
+- `renames`: defines the rules in which a metric should be renamed, based off attribute key value pairs that match. Optional. By default, metric names are `calls_total` and `latency`.
+
 ## Examples
 
 The following is a simple example usage of the spanmetrics processor.
@@ -126,7 +128,14 @@ processors:
       - name: host_id
     resource_attributes_cache_size: 1000
     aggregation_temporality: "AGGREGATION_TEMPORALITY_DELTA"    
-    inherit_instrumentation_library_name: true 
+    inherit_instrumentation_library_name: true
+    renames:
+      - attributes:
+        - attribute:
+            name: http.method
+          attribute_value_regex: ".*"
+        new_calls_total_metric_name: http.server.requests
+        new_latency_metric_name: http.server.duration
 
 exporters:
   jaeger:

@@ -15,6 +15,8 @@
 package spanmetricsprocessor // import "github.com/open-telemetry/opentelemetry-collector-contrib/processor/spanmetricsprocessor"
 
 import (
+	"fmt"
+	"regexp"
 	"time"
 
 	"go.opentelemetry.io/collector/config"
@@ -98,24 +100,52 @@ type Config struct {
 // `NewCallsTotalMetricName` and `NewLatencyMetricName` are mandatory arguments that can not be empty.
 // If no attributes are specified, then all metrics will be caught under this case and renamed.
 type Rename struct {
-	Attributes              []Dimension `mapstructure:"attributes"`
-	NewCallsTotalMetricName string      `mapstructure:"new_calls_total_metric_name"`
-	NewLatencyMetricName    string      `mapstructure:"new_latency_metric_name"`
+	Attributes              []AttributeRenameMatchValues `mapstructure:"attributes"`
+	NewCallsTotalMetricName string                       `mapstructure:"new_calls_total_metric_name"`
+	NewLatencyMetricName    string                       `mapstructure:"new_latency_metric_name"`
 }
 
-func (t Rename) allAttributesMatched(attributesOnMetric *pdata.AttributeMap) bool {
+type AttributeRenameMatchValues struct {
+	Attribute              Dimension `mapstructure:"attribute"`
+	AttributeValueRegex    string    `mapstructure:"attribute_value_regex"`
+	AttributeValueRegexObj *regexp.Regexp
+}
+
+func (r *Rename) buildRegex() error {
+	for renameMatchValIndex, attributeRenameMatchVal := range r.Attributes {
+		regexObj, err := regexp.Compile(attributeRenameMatchVal.AttributeValueRegex)
+		// should never happen as `validateRenames` function validates for errors
+		if err != nil {
+			return fmt.Errorf("renames: invalid regex specified for attribute key %s", attributeRenameMatchVal.Attribute.Name)
+		}
+
+		r.Attributes[renameMatchValIndex].AttributeValueRegexObj = regexObj
+	}
+
+	return nil
+}
+
+func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) bool {
 	// If no attribute specified then it is the default/ catch-all case
-	if len(t.Attributes) == 0 {
+	if len(r.Attributes) == 0 {
 		return true
 	}
 
 	// check if all attributes specified to match on in rename exists on attributes that will be attached to metric
-	for _, attribute := range t.Attributes {
-		_, found := attributesOnMetric.Get(attribute.Name)
+	for _, attribute := range r.Attributes {
+		value, found := attributesOnMetric.Get(attribute.Attribute.Name)
 
+		// check if attribute exists
 		if !found {
 			return false
 		}
+
+		//check if value matches specified regex
+		matched := attribute.AttributeValueRegexObj.Match([]byte(value.StringVal()))
+		if !matched {
+			return false
+		}
+
 	}
 
 	return true

@@ -17,6 +17,7 @@ package spanmetricsprocessor
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -305,6 +306,10 @@ func TestProcessorConsumeTracesConcurrentSafe(t *testing.T) {
 }
 
 func TestProcessorConsumeTraces(t *testing.T) {
+	matchAllRegex, err := regexp.Compile(".*")
+	if err != nil {
+		panic(err)
+	}
 	spanWithLargeTimestamp := pdata.NewTraces()
 	initServiceSpans(
 		serviceSpans{
@@ -394,15 +399,27 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			traces: []pdata.Traces{spanWithLargeTimestamp},
 			renames: []Rename{
 				{
-					Attributes: []Dimension{
-						{Name: "key_that_does_not_exist"},
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: "key_that_does_not_exist",
+							},
+							AttributeValueRegex:    ".*",
+							AttributeValueRegexObj: matchAllRegex,
+						},
 					},
 					NewCallsTotalMetricName: "this_should_not_match_calls_total",
 					NewLatencyMetricName:    "this_should_not_occur_latency",
 				},
 				{
-					Attributes: []Dimension{
-						{Name: stringAttrName},
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: stringAttrName,
+							},
+							AttributeValueRegex:    ".*",
+							AttributeValueRegexObj: matchAllRegex,
+						},
 					},
 					NewCallsTotalMetricName: "new_name_calls_total",
 					NewLatencyMetricName:    "new_name_latency",
@@ -425,8 +442,13 @@ func TestProcessorConsumeTraces(t *testing.T) {
 			traces: []pdata.Traces{spanWithLargeTimestamp},
 			renames: []Rename{
 				{
-					Attributes: []Dimension{
-						{Name: "key_that_does_not_exist"},
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: "key_that_does_not_exist",
+							},
+							AttributeValueRegex: ".*",
+						},
 					},
 					NewCallsTotalMetricName: "this_should_not_match_calls_total",
 					NewLatencyMetricName:    "this_should_not_occur_latency",
@@ -978,7 +1000,7 @@ func verifyMetrics(m pdata.MetricSlice, expectedTemporality pdata.AggregationTem
 		}
 
 		// Then verify len(bucketCounts) == len(ExplicitBounds) + 1
-		assert.Equal(t, len(dp.ExplicitBounds()) +1, len(dp.BucketCounts()))
+		assert.Equal(t, len(dp.ExplicitBounds())+1, len(dp.BucketCounts()))
 
 		verifyMetricLabels(dp, t, seenMetricIDs, attachSpanAndTraceID, expectedSpanAndTraceIDs)
 	}
@@ -1316,9 +1338,19 @@ func TestValidateRenames(t *testing.T) {
 			name: "single rename",
 			renames: []Rename{
 				{
-					Attributes: []Dimension{
-						{Name: "dimension.1"},
-						{Name: "dimension.2"},
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: "dimension.1",
+							},
+							AttributeValueRegex: ".*",
+						},
+						{
+							Attribute: Dimension{
+								Name: "dimension.2",
+							},
+							AttributeValueRegex: ".*",
+						},
 					},
 					NewCallsTotalMetricName: "new_calls_total",
 					NewLatencyMetricName:    "new_latency",
@@ -1329,7 +1361,7 @@ func TestValidateRenames(t *testing.T) {
 			name: "rename catch-all case",
 			renames: []Rename{
 				{
-					Attributes:              []Dimension{},
+					Attributes:              []AttributeRenameMatchValues{},
 					NewCallsTotalMetricName: "new_calls_total",
 					NewLatencyMetricName:    "new_latency",
 				},
@@ -1339,14 +1371,12 @@ func TestValidateRenames(t *testing.T) {
 			name: "rename with two catch-all cases should error",
 			renames: []Rename{
 				{
-					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "new_calls_total",
 					NewLatencyMetricName:    "new_latency",
 				},
 				{
-					Attributes:              []Dimension{},
-					NewCallsTotalMetricName: "new_calls_total",
-					NewLatencyMetricName:    "new_latency",
+					NewCallsTotalMetricName: "new_calls_total2",
+					NewLatencyMetricName:    "new_latency2",
 				},
 			},
 			expectedErr: "renames: rename rule specified after catch-all case (0 attributes rule) is invalid",
@@ -1355,13 +1385,17 @@ func TestValidateRenames(t *testing.T) {
 			name: "rename with rule after catch-all cases should error",
 			renames: []Rename{
 				{
-					Attributes:              []Dimension{},
 					NewCallsTotalMetricName: "new_calls_total",
 					NewLatencyMetricName:    "new_latency",
 				},
 				{
-					Attributes: []Dimension{
-						{Name: "dimension.1"},
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: "test_name",
+							},
+							AttributeValueRegex: "test_regex_value",
+						},
 					},
 					NewCallsTotalMetricName: "new_calls_total",
 					NewLatencyMetricName:    "new_latency",
@@ -1373,9 +1407,8 @@ func TestValidateRenames(t *testing.T) {
 			name: "rename without new calls_total metric name should error",
 			renames: []Rename{
 				{
-					Attributes:              []Dimension{},
-					NewCallsTotalMetricName: "",
-					NewLatencyMetricName:    "new_latency",
+					Attributes:           []AttributeRenameMatchValues{},
+					NewLatencyMetricName: "new_latency",
 				},
 			},
 			expectedErr: "renames: new metric name must be specified",
@@ -1384,7 +1417,7 @@ func TestValidateRenames(t *testing.T) {
 			name: "rename without new latency metric name should error",
 			renames: []Rename{
 				{
-					Attributes:              []Dimension{},
+					Attributes:              []AttributeRenameMatchValues{},
 					NewCallsTotalMetricName: "new_calls_total",
 				},
 			},
@@ -1394,10 +1427,28 @@ func TestValidateRenames(t *testing.T) {
 			name: "rename without new metric name should error",
 			renames: []Rename{
 				{
-					Attributes: []Dimension{},
+					Attributes: []AttributeRenameMatchValues{},
 				},
 			},
 			expectedErr: "renames: new metric name must be specified",
+		},
+		{
+			name: "rename with invalid regex error",
+			renames: []Rename{
+				{
+					Attributes: []AttributeRenameMatchValues{
+						{
+							Attribute: Dimension{
+								Name: "test_name",
+							},
+							AttributeValueRegex: "*",
+						},
+					},
+					NewCallsTotalMetricName: "new_calls_total",
+					NewLatencyMetricName:    "new_latency",
+				},
+			},
+			expectedErr: "renames: invalid regex specified for attribute key test_name",
 		},
 	} {
 		tc := tc
@@ -1413,7 +1464,7 @@ func TestValidateRenames(t *testing.T) {
 	}
 }
 
-func TestAllAttributesMatched(t *testing.T) {
+func TestAllAttributesKVMatched(t *testing.T) {
 	// no attributes
 	attrMapNoAttrs := pdata.NewAttributeMap()
 
@@ -1431,6 +1482,16 @@ func TestAllAttributesMatched(t *testing.T) {
 		"key3": pdata.NewAttributeValueString("value3"),
 	})
 
+	matchAllRegex, err := regexp.Compile(".*")
+	if err != nil {
+		panic(err)
+	}
+
+	noMatchRegex, err := regexp.Compile("sklgnoeiwhdf8638245hfds")
+	if err != nil {
+		panic(err)
+	}
+
 	for _, tc := range []struct {
 		name             string
 		metricAttributes *pdata.AttributeMap
@@ -1438,58 +1499,110 @@ func TestAllAttributesMatched(t *testing.T) {
 		expectedResult   bool
 	}{
 		{
-			name:             "rename that has no matches should not match",
+			name:             "rename that has no attribute name matches should not match",
 			metricAttributes: &attrMapMultipleAttr,
 			rename: Rename{
-				Attributes: []Dimension{
-					{Name: "key_that_doesnt_exist"},
+				Attributes: []AttributeRenameMatchValues{
+					{
+						Attribute: Dimension{
+							Name: "key_that_doesnt_exist",
+						},
+						AttributeValueRegexObj: matchAllRegex,
+					},
 				},
+				NewCallsTotalMetricName: "new_calls_total",
+				NewLatencyMetricName:    "new_latency",
 			},
 			expectedResult: false,
 		},
 		{
-			name:             "rename requires all attributes to be present to match - no match",
+			name:             "rename requires all attribute names to be present to match - no match",
 			metricAttributes: &attrMapMultipleAttr,
 			rename: Rename{
-				Attributes: []Dimension{
-					{Name: "key1"},
-					{Name: "key_that_doesnt_exist"},
+				Attributes: []AttributeRenameMatchValues{
+					{
+						Attribute: Dimension{
+							Name: "key1",
+						},
+						AttributeValueRegexObj: matchAllRegex,
+					},
+					{
+						Attribute: Dimension{
+							Name: "key_that_doesnt_exist",
+						},
+						AttributeValueRegexObj: matchAllRegex,
+					},
 				},
+				NewCallsTotalMetricName: "new_calls_total",
+				NewLatencyMetricName:    "new_latency",
 			},
 			expectedResult: false,
 		},
 		{
-			name:             "rename requires all attributes to be present to match - match",
+			name:             "rename requires all attribute names to be present to match - match",
 			metricAttributes: &attrMapMultipleAttr,
 			rename: Rename{
-				Attributes: []Dimension{
-					{Name: "key1"},
-					{Name: "key2"},
+				Attributes: []AttributeRenameMatchValues{
+					{
+						Attribute: Dimension{
+							Name: "key1",
+						},
+						AttributeValueRegexObj: matchAllRegex,
+					},
+					{
+						Attribute: Dimension{
+							Name: "key2",
+						},
+						AttributeValueRegexObj: matchAllRegex,
+					},
 				},
+				NewCallsTotalMetricName: "new_calls_total",
+				NewLatencyMetricName:    "new_latency",
 			},
 			expectedResult: true,
 		},
 		{
-			name:             "catch-all case should always match - some attributes on metric",
+			name:             "catch-all case should always match (no attributes specified to match on) - some attributes on metric",
 			metricAttributes: &attrMapMultipleAttr,
 			rename: Rename{
-				Attributes: []Dimension{},
+				Attributes:              []AttributeRenameMatchValues{},
+				NewCallsTotalMetricName: "new_calls_total",
+				NewLatencyMetricName:    "new_latency",
 			},
 			expectedResult: true,
 		},
 		{
-			name:             "catch-all case should always match - no attributes on metric",
+			name:             "catch-all case should always match (no attributes specified to match on) - no attributes on metric",
 			metricAttributes: &attrMapNoAttrs,
 			rename: Rename{
-				Attributes: []Dimension{},
+				Attributes:              []AttributeRenameMatchValues{},
+				NewCallsTotalMetricName: "new_calls_total",
+				NewLatencyMetricName:    "new_latency",
 			},
 			expectedResult: true,
+		},
+		{
+			name:             "rename with regex that does not match attribute value should not match",
+			metricAttributes: &attrMapNoAttrs,
+			rename: Rename{
+				Attributes: []AttributeRenameMatchValues{
+					{
+						Attribute: Dimension{
+							Name: "key1",
+						},
+						AttributeValueRegexObj: noMatchRegex,
+					},
+				},
+				NewCallsTotalMetricName: "new_calls_total",
+				NewLatencyMetricName:    "new_latency",
+			},
+			expectedResult: false,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			actualResult := tc.rename.allAttributesMatched(tc.metricAttributes)
+			actualResult := tc.rename.allAttributesKVMatched(tc.metricAttributes)
 			assert.Equal(t, tc.expectedResult, actualResult)
 		})
 	}
@@ -1560,6 +1673,57 @@ func TestValidateDimensions(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildRegex(t *testing.T) {
+	matchAllRegex, err := regexp.Compile(".*")
+	if err != nil {
+		panic(err)
+	}
+	matchSpecificRegex, err := regexp.Compile("abc123")
+	if err != nil {
+		panic(err)
+	}
+
+	renames := []Rename{
+		{
+			Attributes: []AttributeRenameMatchValues{
+				{
+					Attribute: Dimension{
+						Name: "dim1",
+					},
+					AttributeValueRegex: ".*",
+				},
+				{
+					Attribute: Dimension{
+						Name: "dim2",
+					},
+					AttributeValueRegex: ".*",
+				},
+			},
+		},
+		{
+			Attributes: []AttributeRenameMatchValues{
+				{
+					Attribute: Dimension{
+						Name: "dim3",
+					},
+					AttributeValueRegex: "abc123",
+				},
+			},
+		},
+	}
+
+	for _, rename := range renames {
+		err := rename.buildRegex()
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[0].AttributeValueRegexObj.String())
+	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[1].AttributeValueRegexObj.String())
+	require.Equal(t, matchSpecificRegex.String(), renames[1].Attributes[0].AttributeValueRegexObj.String())
 }
 
 func TestFeatureFlag(t *testing.T) {
