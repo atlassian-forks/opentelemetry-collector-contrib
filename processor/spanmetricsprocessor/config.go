@@ -126,6 +126,7 @@ func (r *Rename) buildRegex() error {
 }
 
 func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) bool {
+	fmt.Printf("in allAttributesKVMatched!")
 	// If no attribute specified then it is the default/ catch-all case
 	if len(r.Attributes) == 0 {
 		return true
@@ -133,21 +134,29 @@ func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) b
 
 	// check if all attributes specified to match on in rename exists on attributes that will be attached to metric
 	for _, attribute := range r.Attributes {
-		value, found := attributesOnMetric.Get(attribute.Attribute.Name)
 
+		value, found := attributesOnMetric.Get(attribute.Attribute.Name)
+		fmt.Printf("looking for attribute name: !%s!", attribute.Attribute.Name)
+		fmt.Printf("Found? %v", found)
+		fmt.Printf("Found? %#v", value)
 		// check if attribute exists
 		if !found {
+			fmt.Printf("exit not found")
 			return false
 		}
 
 		//check if value matches specified regex
 		matched := attribute.attributeValueRegexObj.Match([]byte(value.StringVal()))
+		fmt.Printf("looking for regex value: !%s!", attribute.AttributeValueRegex)
+		fmt.Printf("Matched? %v", matched)
 		if !matched {
+			fmt.Printf("exit not found")
 			return false
 		}
 
 	}
 
+	fmt.Printf("return true, we found it!")
 	return true
 }
 
