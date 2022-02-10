@@ -139,7 +139,7 @@ func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) b
 		value, found := attributesOnMetric.Get(attribute.Attribute.Name)
 		fmt.Printf("looking for attribute name: !%s!", attribute.Attribute.Name)
 		fmt.Printf("Found? %v", found)
-		fmt.Printf("Found? %#v", value)
+		fmt.Printf("Value? %#v", value)
 		// check if attribute exists
 		if !found {
 			fmt.Printf("exit not found")
