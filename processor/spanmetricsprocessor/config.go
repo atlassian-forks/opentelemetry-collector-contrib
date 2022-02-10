@@ -106,9 +106,9 @@ type Rename struct {
 }
 
 type AttributeRenameMatchValues struct {
-	Attribute              Dimension      `mapstructure:"attribute"`
-	AttributeValueRegex    string         `mapstructure:"attribute_value_regex"`
-	attributeValueRegexObj *regexp.Regexp `mapstructure:"-"`
+	Attribute              Dimension `mapstructure:"attribute"`
+	AttributeValueRegex    string    `mapstructure:"attribute_value_regex"`
+	attributeValueRegexObj *regexp.Regexp
 }
 
 func (r *Rename) buildRegex() error {
