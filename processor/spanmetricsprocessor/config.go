@@ -108,7 +108,7 @@ type Rename struct {
 type AttributeRenameMatchValues struct {
 	Attribute              Dimension      `mapstructure:"attribute"`
 	AttributeValueRegex    string         `mapstructure:"attribute_value_regex"`
-	AttributeValueRegexObj *regexp.Regexp `mapstructure:"-"`
+	attributeValueRegexObj *regexp.Regexp `mapstructure:"-"`
 }
 
 func (r *Rename) buildRegex() error {
@@ -119,7 +119,7 @@ func (r *Rename) buildRegex() error {
 			return fmt.Errorf("renames: invalid regex specified for attribute key %s", attributeRenameMatchVal.Attribute.Name)
 		}
 
-		r.Attributes[renameMatchValIndex].AttributeValueRegexObj = regexObj
+		r.Attributes[renameMatchValIndex].attributeValueRegexObj = regexObj
 	}
 
 	return nil
@@ -141,7 +141,7 @@ func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) b
 		}
 
 		//check if value matches specified regex
-		matched := attribute.AttributeValueRegexObj.Match([]byte(value.StringVal()))
+		matched := attribute.attributeValueRegexObj.Match([]byte(value.StringVal()))
 		if !matched {
 			return false
 		}

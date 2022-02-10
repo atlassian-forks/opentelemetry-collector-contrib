@@ -405,7 +405,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 								Name: "key_that_does_not_exist",
 							},
 							AttributeValueRegex:    ".*",
-							AttributeValueRegexObj: matchAllRegex,
+							attributeValueRegexObj: matchAllRegex,
 						},
 					},
 					NewCallsTotalMetricName: "this_should_not_match_calls_total",
@@ -418,7 +418,7 @@ func TestProcessorConsumeTraces(t *testing.T) {
 								Name: stringAttrName,
 							},
 							AttributeValueRegex:    ".*",
-							AttributeValueRegexObj: matchAllRegex,
+							attributeValueRegexObj: matchAllRegex,
 						},
 					},
 					NewCallsTotalMetricName: "new_name_calls_total",
@@ -1507,7 +1507,7 @@ func TestAllAttributesKVMatched(t *testing.T) {
 						Attribute: Dimension{
 							Name: "key_that_doesnt_exist",
 						},
-						AttributeValueRegexObj: matchAllRegex,
+						attributeValueRegexObj: matchAllRegex,
 					},
 				},
 				NewCallsTotalMetricName: "new_calls_total",
@@ -1524,13 +1524,13 @@ func TestAllAttributesKVMatched(t *testing.T) {
 						Attribute: Dimension{
 							Name: "key1",
 						},
-						AttributeValueRegexObj: matchAllRegex,
+						attributeValueRegexObj: matchAllRegex,
 					},
 					{
 						Attribute: Dimension{
 							Name: "key_that_doesnt_exist",
 						},
-						AttributeValueRegexObj: matchAllRegex,
+						attributeValueRegexObj: matchAllRegex,
 					},
 				},
 				NewCallsTotalMetricName: "new_calls_total",
@@ -1547,13 +1547,13 @@ func TestAllAttributesKVMatched(t *testing.T) {
 						Attribute: Dimension{
 							Name: "key1",
 						},
-						AttributeValueRegexObj: matchAllRegex,
+						attributeValueRegexObj: matchAllRegex,
 					},
 					{
 						Attribute: Dimension{
 							Name: "key2",
 						},
-						AttributeValueRegexObj: matchAllRegex,
+						attributeValueRegexObj: matchAllRegex,
 					},
 				},
 				NewCallsTotalMetricName: "new_calls_total",
@@ -1590,7 +1590,7 @@ func TestAllAttributesKVMatched(t *testing.T) {
 						Attribute: Dimension{
 							Name: "key1",
 						},
-						AttributeValueRegexObj: noMatchRegex,
+						attributeValueRegexObj: noMatchRegex,
 					},
 				},
 				NewCallsTotalMetricName: "new_calls_total",
@@ -1721,9 +1721,9 @@ func TestBuildRegex(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[0].AttributeValueRegexObj.String())
-	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[1].AttributeValueRegexObj.String())
-	require.Equal(t, matchSpecificRegex.String(), renames[1].Attributes[0].AttributeValueRegexObj.String())
+	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[0].attributeValueRegexObj.String())
+	require.Equal(t, matchAllRegex.String(), renames[0].Attributes[1].attributeValueRegexObj.String())
+	require.Equal(t, matchSpecificRegex.String(), renames[1].Attributes[0].attributeValueRegexObj.String())
 }
 
 func TestFeatureFlag(t *testing.T) {
