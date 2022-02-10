@@ -127,6 +127,7 @@ func (r *Rename) buildRegex() error {
 
 func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) bool {
 	fmt.Printf("in allAttributesKVMatched!")
+	fmt.Printf("attributes on metric? %#v", attributesOnMetric)
 	// If no attribute specified then it is the default/ catch-all case
 	if len(r.Attributes) == 0 {
 		return true
