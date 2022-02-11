@@ -153,7 +153,7 @@ func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap, l
 
 		//check if value matches specified regex
 		matched := attribute.attributeValueRegexObj.Match([]byte(value.StringVal()))
-		logger.Info(fmt.Sprintf("looking for regex value: !%s!", attribute.AttributeValueRegex))
+		logger.Info(fmt.Sprintf("looking for regex value: !%s!", attribute.attributeValueRegexObj.String()))
 		logger.Info(fmt.Sprintf("Matched? %v", matched))
 		if !matched {
 			fmt.Printf("exit not found")
