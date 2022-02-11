@@ -21,6 +21,7 @@ import (
 
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/consumer/pdata"
+	"go.uber.org/zap"
 )
 
 const (
@@ -125,9 +126,10 @@ func (r *Rename) buildRegex() error {
 	return nil
 }
 
-func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) bool {
-	fmt.Printf("in allAttributesKVMatched!")
-	fmt.Printf("attributes on metric? %#v", attributesOnMetric)
+func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap, logger *zap.Logger) bool {
+	logger.Info("in allAttributesKVMatched!")
+	logger.Info(fmt.Sprintf("attributes on metric? %#v", attributesOnMetric))
+
 	// If no attribute specified then it is the default/ catch-all case
 	if len(r.Attributes) == 0 {
 		return true
@@ -137,19 +139,19 @@ func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) b
 	for _, attribute := range r.Attributes {
 
 		value, found := attributesOnMetric.Get(attribute.Attribute.Name)
-		fmt.Printf("looking for attribute name: !%s!", attribute.Attribute.Name)
-		fmt.Printf("Found? %v", found)
-		fmt.Printf("Value? %#v", value)
+		logger.Info(fmt.Sprintf("looking for attribute name: !%s!", attribute.Attribute.Name))
+		logger.Info(fmt.Sprintf("Found? %v", found))
+		logger.Info(fmt.Sprintf("Value? %#v", value))
 		// check if attribute exists
 		if !found {
-			fmt.Printf("exit not found")
+			logger.Info("exit not found")
 			return false
 		}
 
 		//check if value matches specified regex
 		matched := attribute.attributeValueRegexObj.Match([]byte(value.StringVal()))
-		fmt.Printf("looking for regex value: !%s!", attribute.AttributeValueRegex)
-		fmt.Printf("Matched? %v", matched)
+		logger.Info(fmt.Sprintf("looking for regex value: !%s!", attribute.AttributeValueRegex))
+		logger.Info(fmt.Sprintf("Matched? %v", matched))
 		if !matched {
 			fmt.Printf("exit not found")
 			return false
@@ -157,7 +159,7 @@ func (r Rename) allAttributesKVMatched(attributesOnMetric *pdata.AttributeMap) b
 
 	}
 
-	fmt.Printf("return true, we found it!")
+	logger.Info("return true, we found it!")
 	return true
 }
 

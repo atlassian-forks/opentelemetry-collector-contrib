@@ -427,7 +427,7 @@ func (p *processorImp) collectLatencyMetrics(rm pdata.ResourceMetrics, resAttrKe
 
 			mLatency.SetName(defaultLatencyMetricName)
 			for _, rename := range p.renames {
-				if rename.allAttributesKVMatched(dimensions) {
+				if rename.allAttributesKVMatched(dimensions, p.logger) {
 					mLatency.SetName(rename.NewLatencyMetricName)
 					break
 				}
@@ -467,7 +467,7 @@ func (p *processorImp) collectCallMetrics(rm pdata.ResourceMetrics, resAttrKey r
 
 			mCalls.SetName(defaultCallsTotalMetricName)
 			for _, rename := range p.renames {
-				if rename.allAttributesKVMatched(dimensions) {
+				if rename.allAttributesKVMatched(dimensions, p.logger) {
 					mCalls.SetName(rename.NewCallsTotalMetricName)
 					break
 				}
