@@ -3,9 +3,8 @@ module github.com/open-telemetry/opentelemetry-collector-contrib/extension/httpf
 go 1.15
 
 require (
-	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/stretchr/testify v1.7.0
-	go.opentelemetry.io/collector v0.27.0
-	go.uber.org/zap v1.16.0
-	gopkg.in/ini.v1 v1.57.0 // indirect
+	go.opentelemetry.io/collector v0.46.0
+	go.uber.org/zap v1.21.0
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
