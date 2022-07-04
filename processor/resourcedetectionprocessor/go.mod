@@ -3,7 +3,8 @@ module github.com/open-telemetry/opentelemetry-collector-contrib/processor/resou
 go 1.15
 
 require (
-	cloud.google.com/go v0.81.0
+	cloud.google.com/go v0.103.0 // indirect
+	cloud.google.com/go/compute v1.7.0
 	github.com/Showmax/go-fqdn v1.0.0
 	github.com/armon/go-metrics v0.3.3 // indirect
 	github.com/aws/aws-sdk-go v1.38.41
