@@ -13,7 +13,7 @@ require (
 	github.com/onsi/ginkgo v1.14.1 // indirect
 	github.com/onsi/gomega v1.10.2 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.0
 	go.elastic.co/apm v1.9.1-0.20201218004853-18a8126106c6
 	go.elastic.co/fastjson v1.1.0
 	go.opentelemetry.io/collector v0.27.0
