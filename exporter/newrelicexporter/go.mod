@@ -19,7 +19,7 @@ require (
 	go.opentelemetry.io/collector v0.27.0
 	go.uber.org/zap v1.16.0
 	google.golang.org/genproto v0.0.0-20210312152112-fc591d9ea70f
-	google.golang.org/grpc v1.37.1
-	google.golang.org/protobuf v1.26.0
+	google.golang.org/grpc v1.48.0
+	google.golang.org/protobuf v1.27.1
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
