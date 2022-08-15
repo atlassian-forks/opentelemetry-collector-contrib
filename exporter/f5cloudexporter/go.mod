@@ -13,7 +13,7 @@ require (
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	go.opentelemetry.io/collector v0.27.0
-	go.uber.org/zap v1.16.0
+	go.uber.org/zap v1.22.0
 	golang.org/x/oauth2 v0.0.0-20210427180440-81ed05c6b58c
 	google.golang.org/api v0.46.0
 	gopkg.in/ini.v1 v1.57.0 // indirect
