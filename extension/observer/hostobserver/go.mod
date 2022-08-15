@@ -15,7 +15,7 @@ require (
 	github.com/shirou/gopsutil v3.21.4+incompatible
 	github.com/stretchr/testify v1.7.0
 	go.opentelemetry.io/collector v0.27.0
-	go.uber.org/zap v1.16.0
+	go.uber.org/zap v1.22.0
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
 
