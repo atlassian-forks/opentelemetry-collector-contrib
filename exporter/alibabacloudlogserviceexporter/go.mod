@@ -7,8 +7,8 @@ require (
 	github.com/census-instrumentation/opencensus-proto v0.3.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/pelletier/go-toml v1.8.0 // indirect
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.0
 	go.opentelemetry.io/collector v0.27.0
-	go.uber.org/zap v1.16.0
+	go.uber.org/zap v1.23.0
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
