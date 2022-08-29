@@ -12,10 +12,10 @@ require (
 	github.com/onsi/ginkgo v1.14.1 // indirect
 	github.com/onsi/gomega v1.10.2 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.0
 	go.opencensus.io v0.23.0
 	go.opentelemetry.io/collector v0.27.0
 	go.opentelemetry.io/otel v0.20.0
-	go.uber.org/zap v1.16.0
+	go.uber.org/zap v1.23.0
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
