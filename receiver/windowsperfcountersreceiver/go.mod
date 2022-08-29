@@ -11,9 +11,9 @@ require (
 	github.com/onsi/ginkgo v1.14.1 // indirect
 	github.com/onsi/gomega v1.10.2 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.0
 	go.opentelemetry.io/collector v0.27.0
-	go.uber.org/zap v1.16.0
-	golang.org/x/sys v0.0.0-20210423082822-04245dca01da
+	go.uber.org/zap v1.23.0
+	golang.org/x/sys v0.0.0-20210510120138-977fb7262007
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
