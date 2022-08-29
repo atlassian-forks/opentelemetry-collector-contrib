@@ -11,10 +11,10 @@ require (
 	github.com/onsi/gomega v1.10.2 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/shirou/gopsutil v3.21.4+incompatible
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.0
 	github.com/testcontainers/testcontainers-go v0.10.0
 	go.opentelemetry.io/collector v0.27.0
 	go.uber.org/atomic v1.7.0
-	go.uber.org/zap v1.16.0
+	go.uber.org/zap v1.23.0
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
