@@ -3,6 +3,9 @@ module github.com/open-telemetry/opentelemetry-collector-contrib/exporter/google
 go 1.15
 
 require (
+	cloud.google.com/go/container v1.4.0 // indirect
+	cloud.google.com/go/monitoring v1.6.0 // indirect
+	cloud.google.com/go/trace v1.2.0 // indirect
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.6
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v0.20.0
 	github.com/armon/go-metrics v0.3.3 // indirect
@@ -22,11 +25,9 @@ require (
 	go.opentelemetry.io/otel/sdk v0.20.0
 	go.opentelemetry.io/otel/trace v0.20.0
 	go.uber.org/zap v1.16.0
-	golang.org/x/net v0.0.0-20210510120150-4163338589ed // indirect
-	golang.org/x/sys v0.0.0-20210510120138-977fb7262007 // indirect
-	google.golang.org/api v0.46.0
-	google.golang.org/genproto v0.0.0-20210506142907-4a47615972c2
-	google.golang.org/grpc v1.37.1
-	google.golang.org/protobuf v1.26.0
+	google.golang.org/api v0.98.0
+	google.golang.org/genproto v0.0.0-20220916172020-2692e8806bfa
+	google.golang.org/grpc v1.48.0
+	google.golang.org/protobuf v1.28.1
 	gopkg.in/ini.v1 v1.57.0 // indirect
 )
