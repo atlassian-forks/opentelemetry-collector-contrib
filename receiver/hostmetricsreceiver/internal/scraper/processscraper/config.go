@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterset"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/processscraper/internal/metadata"
 )
 
@@ -39,6 +40,8 @@ type Config struct {
 	// ScrapeProcessDelay is used to indicate the minimum amount of time a process must be running
 	// before metrics are scraped for it.  The default value is 0 seconds (0s)
 	ScrapeProcessDelay time.Duration `mapstructure:"scrape_process_delay"`
+
+	internal.NopExtractParentConfig
 }
 
 type MatchConfig struct {

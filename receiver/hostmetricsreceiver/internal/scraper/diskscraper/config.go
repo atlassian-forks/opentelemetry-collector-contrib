@@ -16,6 +16,7 @@ package diskscraper // import "github.com/open-telemetry/opentelemetry-collector
 
 import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterset"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/diskscraper/internal/metadata"
 )
 
@@ -29,6 +30,8 @@ type Config struct {
 	// If neither `include` or `exclude` are set, metrics will be generated for all devices.
 	Include MatchConfig `mapstructure:"include"`
 	Exclude MatchConfig `mapstructure:"exclude"`
+
+	internal.NopExtractParentConfig
 }
 
 type MatchConfig struct {

@@ -88,6 +88,11 @@ func createMetricsReceiver(
 ) (component.MetricsReceiver, error) {
 	oCfg := cfg.(*Config)
 
+	err := setGopsutilsEnvVars(oCfg.RootPath)
+	if err != nil {
+		return nil, err
+	}
+
 	addScraperOptions, err := createAddScraperOptions(ctx, set, oCfg, scraperFactories)
 	if err != nil {
 		return nil, err

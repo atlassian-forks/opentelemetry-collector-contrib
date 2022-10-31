@@ -26,6 +26,10 @@ type Config struct {
 	// Metrics allows to customize scraped metrics representation.
 	Metrics metadata.MetricsSettings `mapstructure:"metrics"`
 
+	// RootPath specifies the root directory of the host filesystem. Often desired when running from inside a container.
+	// It should not be set in the scraper config, and will be passed down from the top-level hostmetricsreceiver.
+	RootPath string `mapstructure:"-"`
+
 	// IncludeDevices specifies a filter on the devices that should be included in the generated metrics.
 	IncludeDevices DeviceMatchConfig `mapstructure:"include_devices"`
 	// ExcludeDevices specifies a filter on the devices that should be excluded from the generated metrics.

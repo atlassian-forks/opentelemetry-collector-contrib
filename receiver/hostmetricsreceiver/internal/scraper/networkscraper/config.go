@@ -16,6 +16,7 @@ package networkscraper // import "github.com/open-telemetry/opentelemetry-collec
 
 import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/coreinternal/processor/filterset"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/networkscraper/internal/metadata"
 )
 
@@ -26,6 +27,8 @@ type Config struct {
 	Include MatchConfig `mapstructure:"include"`
 	// Exclude specifies a filter on the network interfaces that should be excluded from the generated metrics.
 	Exclude MatchConfig `mapstructure:"exclude"`
+
+	internal.NopExtractParentConfig
 }
 
 type MatchConfig struct {

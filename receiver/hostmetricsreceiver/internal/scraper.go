@@ -19,6 +19,8 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/receiver/scraperhelper"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver"
 )
 
 // ScraperFactory can create a MetricScraper.
@@ -33,4 +35,9 @@ type ScraperFactory interface {
 
 // Config is the configuration of a scraper.
 type Config interface {
+	ExtractParentConfig(config hostmetricsreceiver.Config)
 }
+
+type NopExtractParentConfig struct{}
+
+func (n *NopExtractParentConfig) ExtractParentConfig(_ hostmetricsreceiver.Config) {}
