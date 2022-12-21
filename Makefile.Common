@@ -6,6 +6,7 @@ SHELL = /bin/bash
 ifeq ($(shell uname -s),Windows)
 	.SHELLFLAGS = /o pipefile /c
 else 
+	SHELL = /bin/bash
 	.SHELLFLAGS = -o pipefail -c
 endif
 
