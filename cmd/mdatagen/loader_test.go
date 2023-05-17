@@ -23,6 +23,8 @@ import (
 )
 
 func Test_loadMetadata(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		want    metadata
@@ -198,9 +200,32 @@ func Test_loadMetadata(t *testing.T) {
 			want:    metadata{},
 			wantErr: "unused attributes: [unused_attr]",
 		},
+		{
+			name: "testdata/multi_line_strings.yaml",
+			want: metadata{
+				Type: "nopreceiver",
+				Metrics: map[metricName]metric{
+					"metric": {
+						Enabled:     true,
+						Description: "My Awesome\nMultiline\nDescription\n",
+						Unit:        "s",
+						Gauge: &gauge{
+							MetricValueType: MetricValueType{
+								ValueType: pmetric.NumberDataPointValueTypeDouble,
+							},
+						},
+					},
+				},
+				ScopeName: "otelcol",
+			},
+			wantErr: "",
+		},
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got, err := loadMetadata(tt.name)
 			if tt.wantErr != "" {
 				require.Error(t, err)

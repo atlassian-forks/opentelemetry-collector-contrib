@@ -51,6 +51,10 @@ func Test_runContents(t *testing.T) {
 			yml:                 "status_only.yaml",
 			wantStatusGenerated: true,
 		},
+		{
+			yml:     "multi_line_strings.yaml",
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.yml, func(t *testing.T) {

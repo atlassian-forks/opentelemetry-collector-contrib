@@ -1,0 +1,12 @@
+type: nopreceiver
+
+metrics:
+  metric:
+    enabled: true
+    description: |
+      My Awesome
+      Multiline
+      Description
+    unit: s
+    gauge:
+      value_type: double
